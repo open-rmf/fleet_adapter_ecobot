@@ -5,7 +5,7 @@
 This repository contains an RMF fleet adapter developed for [Gaussian Ecobot](https://www.gaussianrobotics.com/) cleaning robots.
 It has been tested on S40, S50 and S75 variants of robots.
 The adapter communicates with the robots via REST API calls.
-For more information on the APIs, please reference [this document](http://download.gs-robot.com/gs_api/api.html#10206)
+For more information on the APIs, please reference [this document](http://download.gs-robot.com/gs_api/api.html#1)
 
 ## Requirements
 * [Open-RMF](https://github.com/open-rmf/rmf)
