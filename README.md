@@ -1,5 +1,7 @@
 # Ecobot Fleet Adapter
 
+![](../media/media/fleet_adapter_ecobot.gif)
+
 This repository contains an RMF fleet adapter developed for [Gaussian Ecobot](https://www.gaussianrobotics.com/) cleaning robots.
 It has been tested on S40, S50 and S75 variants of robots.
 The adapter communicates with the robots via REST API calls.
