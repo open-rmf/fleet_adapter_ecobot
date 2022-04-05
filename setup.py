@@ -17,12 +17,13 @@ setup(
     zip_safe=True,
     maintainer='Yadunund',
     maintainer_email='yadunund@openrobotics.org',
-    description='RMF fleet adapter for Gaussian Ecobot',
+    description='RMF fleet adapter for Gaussian Ecobot robots',
     license='Apache License 2.0',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
             'fleet_adapter_ecobot=fleet_adapter_ecobot.fleet_adapter_ecobot:main',
+            'ecobot_sim_server=fleet_adapter_ecobot.ecobot_sim_server:main',
         ],
     },
 )
