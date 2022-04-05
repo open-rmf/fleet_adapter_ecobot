@@ -1,4 +1,4 @@
-# Ecobot Fleet Adapter
+# Fleet Adapter Ecobot
 
 ![](../media/media/fleet_adapter_ecobot.gif)
 
