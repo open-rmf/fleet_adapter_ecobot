@@ -29,8 +29,7 @@ import time
 
 from datetime import timedelta
 
-from .EcobotClientAPI import EcobotAPI
-
+from typing import Optional, Tuple
 
 # States for EcobotCommandHandle's state machine used when guiding robot along
 # a new path
@@ -60,7 +59,7 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                  vehicle_traits,
                  transforms,
                  map_name,
-                 start,
+                 rmf_map_name,
                  position,
                  charger_waypoint,
                  update_frequency,
@@ -74,6 +73,8 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
         self.vehicle_traits = vehicle_traits
         self.transforms = transforms
         self.map_name = map_name
+        self.rmf_map_name = rmf_map_name
+
         # Get the index of the charger waypoint
         waypoint = self.graph.find_waypoint(charger_waypoint)
         # assert waypoint, f"Charger waypoint {charger_waypoint} does not exist in the navigation graph"
@@ -89,7 +90,6 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
         self.position = position # (x,y,theta) in RMF coordinates (meters, radians)
         self.initialized = False
         self.state = EcobotState.IDLE
-        self.dock_name = ""
         self.adapter = adapter
 
         self.requested_waypoints = [] # RMF Plan waypoints
@@ -115,17 +115,10 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
         self._dock_thread = None
         self._quit_dock_event = threading.Event()
 
-        print(f"{self.name} is starting at: [{self.position[0]:.2f}, {self.position[1]:.2f}, {self.position[2]:.2f}")
+        self.action_execution = None
+        self.participant = None
 
-        # Update tracking variables
-        if start.lane is not None:  # If the robot is on a lane
-            print(f"Start lane index:{start.lane}")
-            self.last_known_lane_index = start.lane
-            self.on_lane = start.lane
-            # self.last_known_waypoint_index = start.waypoint
-        else:  # Otherwise, the robot is on a waypoint
-            self.last_known_waypoint_index = start.waypoint
-            self.on_waypoint = start.waypoint
+        print(f"{self.name} is starting at: [{self.position[0]:.2f}, {self.position[1]:.2f}, {self.position[2]:.2f}")
 
         self.state_update_timer = self.node.create_timer(
             1.0 / self.update_frequency,
@@ -134,12 +127,11 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
         # The Ecobot robot has various cleaning modes. Here we turn off the
         # cleaning systems. These will be activated only during cleaning
         self.api.set_cleaning_mode(self.config['inactive_cleaning_config'])
-
         self.initialized = True
 
     def clear(self):
         with self._lock:
-            print("Clearing internal states")
+            print(f"Clearing internal states with current waypoint {self.on_waypoint}")
             self.requested_waypoints = []
             self.remaining_waypoints = []
             self.path_finished_callback = None
@@ -148,6 +140,7 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
             # self.target_waypoint = None
             self.state = EcobotState.IDLE
 
+    # override function
     def stop(self):
         # Stop motion of the robot. Tracking variables should remain unchanged.
         while True:
@@ -156,6 +149,7 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                 break
             time.sleep(1.0)
 
+    # override function
     def follow_new_path(
         self,
         waypoints,
@@ -231,12 +225,8 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                     self.path_index = self.remaining_waypoints[0].index
                     # Move robot to next waypoint
                     target_pose =  self.target_waypoint.position
-                    [x,y] = self.transforms["rmf_to_ecobot"].transform(target_pose[:2])
-                    theta = math.degrees(target_pose[2] + self.transforms['orientation_offset'])
-                    if theta > 180.0:
-                        theta = 360.0 - theta
-                    if theta < -180.0:
-                        theta = 360.0 + theta
+                    [x,y, yaw] = self.transforms.to_robot_map(target_pose[:3])
+                    theta = math.degrees(yaw)
 
                     print(f"Requesting robot to navigate to "
                         f"[{self.path_index}][{x:.0f},{y:.0f},{theta:.0f}] "
@@ -293,7 +283,8 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                                 # waypoint or the target one
                                 if self.target_waypoint.graph_index is not None and self.dist(self.position, target_pose) < 0.5:
                                     self.on_waypoint = self.target_waypoint.graph_index
-                                elif self.last_known_waypoint_index is not None and self.dist(self.position, self.graph.get_waypoint(self.last_known_waypoint_index).location) < 0.5:
+                                elif self.last_known_waypoint_index is not None and \
+                                        self.dist(self.position, self.graph.get_waypoint(self.last_known_waypoint_index).location) < 0.5:
                                     self.on_waypoint = self.last_known_waypoint_index
                                 else:
                                     self.on_lane = None # update_off_grid()
@@ -316,6 +307,7 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
             target=_follow_path)
         self._follow_path_thread.start()
 
+    # override function
     def dock(
         self,
         dock_name,
@@ -325,79 +317,40 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
         if self._dock_thread is not None:
             self._dock_thread.join()
 
-        self.dock_name = dock_name
         assert docking_finished_callback is not None
         self.docking_finished_callback = docking_finished_callback
 
         # Get the waypoint that the robot is trying to dock into. The dock_name and waypoint_name must match
-        dock_waypoint = self.graph.find_waypoint(self.dock_name)
-        assert(dock_waypoint)
-        self.dock_waypoint_index = dock_waypoint.index
+        self.node.get_logger().info(f"[DOCK] Start docking to charger with dock param: {dock_name}")
 
+        # NOTE: Now only assume that dock is only used by during charging.
+        self.dock_waypoint_index = self.charger_waypoint_index
+        self.on_waypoint = self.dock_waypoint_index
         def _dock():
+            # TODO, clean up implementation of dock
             # Check if the dock waypoint is a charger or cleaning zone and call the
             # appropriate API. Charger docks should have dock_name as "charger_<robot_name>"
-            is_cleaning = False
             # todo [YV]: Map dock names to API callbacks instead of checking substrings
-            if (dock_name[:7] == "charger"):
-                while True:
-                    self.node.get_logger().info(f"Requesting robot {self.name} to charge at {self.dock_name}")
-                    # The Ecobot75 requires a TF path to dock. This path is
-                    # named the same as the dock name (charger_ecobot75_x)
-                    if self.name[:8] == "ecobot75":
-                        self.api.set_cleaning_mode(self.config['inactive_cleaning_config'])
-                        if self.api.start_clean(self.dock_name, self.map_name):
-                            break
-                    # For Ecobot40, we will use the navigate_to_waypoint API to
-                    # dock into the charger
-                    else:
-                        if self.api.navigate_to_waypoint(self.dock_name, self.map_name):
-                            break
-                    time.sleep(1.0)
-            else:
-                is_cleaning = True
-                while True:
-                    self.node.get_logger().info(f"Requesting robot {self.name} to clean {self.dock_name}")
-                    self.api.set_cleaning_mode(self.config['active_cleaning_config'])
-                    if self.api.start_clean(self.dock_name, self.map_name):
+            while True:
+                self.node.get_logger().info(f"Requesting robot {self.name} to charge at {dock_name}")
+                # The Ecobot75 requires a TF path to dock to charging location. This path is
+                # named the same as the dock name (charger_ecobot75_x)
+                if self.name[:8] == "ecobot75":
+                    self.api.set_cleaning_mode(self.config['inactive_cleaning_config'])
+                    if self.api.start_task(dock_name, self.map_name):
                         break
-                    time.sleep(1.0)
-            with self._lock:
-                self.on_waypoint = None
-                self.on_lane = None
-            time.sleep(1.0)
-            dock_positions = copy.copy(self.config["docks"].get(self.dock_name))
-            while (not self.api.docking_completed()):
+                # For Ecobot40 and 50, we will use the navigate_to_waypoint API to
+                # dock into the charger
+                else:
+                    if self.api.navigate_to_waypoint(dock_name, self.map_name):
+                        break
+                time.sleep(1.0)
+            while (not self.api.task_completed()):
                 # Check if we need to abort
                 if self._quit_dock_event.is_set():
                     self.node.get_logger().info("Aborting docking")
                     return
                 time.sleep(0.5)
-                if (is_cleaning):
-                    if dock_positions is None:
-                        self.node.get_logger().error(f"[docking] dock positions undefined for dock_name:{self.dock_name}")
-                        continue
-                    if not dock_positions:
-                        continue
-                    participant = self.update_handle.get_unstable_participant()
-                    if participant is not None:
-                        # positions = []
-                        # positions.append(self.position)
-                        # # The Ecobot API does not give us the list of waypoints remaining
-                        # # in the cleaning path and hence we need to estimate this
-                        # if (self.dist(dock_positions[0], self.position) < 1.0):
-                        #     dock_positions.pop(0)
-                        # positions.extend(dock_positions)
-                        positions = dock_positions
-
-                        trajectory = schedule.make_trajectory(
-                            self.vehicle_traits,
-                            self.adapter.now(),
-                            positions)
-                        route = schedule.Route(self.map_name,trajectory)
-                        participant.set_itinerary([route])
-                    else:
-                        self.node.get_logger().error("[docking] Unable to get participant")
             # Here we assume that the robot has successfully reached waypoint with name same as dock_name
             with self._lock:
                 self.on_waypoint = self.dock_waypoint_index
@@ -414,14 +367,8 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
         RMF coordinate frame'''
         position = self.api.position()
         if position is not None:
-            x,y = self.transforms['ecobot_to_rmf'].transform([position[0],position[1]])
-            theta = math.radians(position[2]) - self.transforms['orientation_offset']
-            # Wrap theta between [-pi, pi]. Very important else arrival estimate
-            # will assume robot has to do full rotations and delay the schedule
-            if theta > np.pi:
-                theta = theta - (2 * np.pi)
-            if theta < -np.pi:
-                theta =  (2 * np.pi) + theta
+            x,y,theta = self.transforms.to_rmf_map([position[0],position[1], math.radians(position[2])])
+            print(f"Convert pos from {position} grid coor to {x},{y}, {theta} rmf coor")
             return [x,y,theta]
         else:
             self.node.get_logger().error("Unable to retrieve position from robot. Returning last known position...")
@@ -441,8 +388,37 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
         if self.update_handle is not None:
             self.update_state()
 
+    # call this when starting cleaning execution
+    def _action_executor(self, 
+                        category: str,
+                        description: dict,
+                        execution:
+                        adpt.robot_update_handle.ActionExecution):
+        with self._lock:
+            # only accept clean category
+            assert(category == "clean")
+            attempts = 0
+            while attempts < 2:
+                self.node.get_logger().info(f"Requesting robot {self.name} to clean {description}")
+                self.api.set_cleaning_mode(self.config['active_cleaning_config'])
+                if self.api.start_clean(description["clean_task_name"], self.map_name):
+                    self.start_clean_action_time = self.adapter.now()
+                    self.on_waypoint = None
+                    self.on_lane = None
+                    self.action_execution = execution
+                    # robot moves slower during cleaning
+                    self.vehicle_traits.linear.nominal_velocity *= 0.2
+                    break
+                attempts+=1
+                time.sleep(1.0)
+            self.node.get_logger().warn(f"Failed to initiate cleaning action for robot {self.name}")
+            # TODO: issue error ticket
+            execution.error("Failed to initiate cleaning action for robot {self.name}")
+
     def update_state(self):
         self.update_handle.update_battery_soc(self.battery_soc)
+
+        # only run this during init
         if not self.charger_is_set:
             if ("max_delay" in self.config.keys()):
                 max_delay = self.config["max_delay"]
@@ -452,14 +428,64 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                 self.update_handle.set_charger_waypoint(self.charger_waypoint_index)
             else:
                 self.node.get_logger().info("Invalid waypoint supplied for charger. Using default nearest charger in the map")
+            self.update_handle.set_action_executor(self._action_executor)
             self.charger_is_set = True
-        # Update position
+            self.participant = self.update_handle.get_unstable_participant()
+
+        # Update states and positions
         with self._lock:
-            if (self.on_waypoint is not None): # if robot is on a waypoint
-                # print(f"[update] Calling update_off_grid_position() on waypoint with pose[{self.position[0]:.2f}, {self.position[1]:.2f}, {self.position[2]:.2f}] and waypoint[{self.on_waypoint}]")
-                # self.update_handle.update_off_grid_position(
-                #     self.position, self.on_waypoint)
-                print(f"[update] Calling update_current_waypoint() on waypoint with pose[{self.position[0]:.2f}, {self.position[1]:.2f}, {self.position[2]:.2f}] and waypoint[{self.on_waypoint}]")
+            if (self.action_execution):
+                print("Executing action, cleaning state")
+                # check if action is completed/killed/canceled
+                action_ok = self.action_execution.okay()
+                if self.api.task_completed() or not action_ok:
+                    if action_ok:
+                        self.node.get_logger().info("Cleaning is completed")
+                        self.action_execution.finished()
+                    else:
+                        self.node.get_logger().warn("cleaning task is killed/canceled")
+                    self.api.set_cleaning_mode(self.config['inactive_cleaning_config'])
+                    self.action_execution = None
+                    self.start_clean_action_time = None
+                    self.vehicle_traits.linear.nominal_velocity *= 5 # change back vel
+                else:
+                    assert(self.participant)
+                    assert(self.start_clean_action_time)
+                    total_action_time = timedelta(hours=1.0)  #TODO: populate actual total time``
+                    remaining_time = total_action_time - (self.adapter.now() - self.start_clean_action_time)
+                    print(f"Still cleaning =) Estimated remaining time: [{remaining_time}]")
+                    self.action_execution.update_remaining_time(remaining_time)
+
+                    # create a short segment of the trajectory according to robot current heading
+                    _x, _y, _theta = self.position
+                    fake_pos = [_x + math.cos(_theta)*2.5, _y + math.sin(_theta)*2.5, _theta]
+                    positions = [self.position, fake_pos] 
+
+                    # update robot current location with lost position, TODO: fix this as it is
+                    # using the front() of the starts list, it the first start might not be the nearest
+                    # self.update_handle.update_lost_position(
+                    #     self.rmf_map_name, self.position,
+                    #     max_merge_waypoint_distance = 1.0, max_merge_lane_distance=15.0)
+
+                    ## Get Closest point on graph and update location
+                    closest_wp = self.get_closest_waypoint_idx(self.position)
+                    if closest_wp:
+                        self.update_handle.update_off_grid_position(
+                            self.position, closest_wp)
+                    else:
+                        self.node.get_logger().error(f"Cant find closest waypoint!")
+                        self.update_handle.update_off_grid_position(
+                            self.position, self.target_waypoint.graph_index)
+
+                    trajectory = schedule.make_trajectory(
+                        self.vehicle_traits,
+                        self.adapter.now(),
+                        positions)
+                    route = schedule.Route(self.rmf_map_name,trajectory)
+                    self.participant.set_itinerary([route])
+            elif (self.on_waypoint is not None): # if robot is on a waypoint
+                print(f"[update] Calling update_current_waypoint() on waypoint with " \
+                      f"pose[{self.position_str()}] and waypoint[{self.on_waypoint}]")
                 self.update_handle.update_current_waypoint(
                     self.on_waypoint, self.position[2])
             elif (self.on_lane is not None): # if robot is on a lane
@@ -474,21 +500,55 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                 lane_indices = [self.on_lane]
                 if reverse_lane is not None: # Unidirectional graph
                     lane_indices.append(reverse_lane.index)
-                print(f"[update] Calling update_current_lanes() with pose[{self.position[0]:.2f}, {self.position[1]:.2f}, {self.position[2]:.2f}] and lanes:{lane_indices}")
+                print(f"[update] Calling update_current_lanes() with pose[{self.position_str()}] "\
+                      f"and lanes:{lane_indices}")
                 self.update_handle.update_current_lanes(
                     self.position, lane_indices)
             elif (self.dock_waypoint_index is not None):
-                print(f"[update] Calling update_off_grid_position() dock with pose[{self.position[0]:.2f}, {self.position[1]:.2f}, {self.position[2]:.2f}] and waypoint[{self.dock_waypoint_index}]")
+                print(f"[update] Calling update_off_grid_position() dock with pose" \
+                      f"[{self.position_str()}] and waypoint[{self.dock_waypoint_index}]")
                 self.update_handle.update_off_grid_position(
                     self.position, self.dock_waypoint_index)
             elif (self.target_waypoint is not None and self.target_waypoint.graph_index is not None): # if robot is merging into a waypoint
-                print(f"[update] Calling update_off_grid_position() with pose[{self.position[0]:.2f}, {self.position[1]:.2f}, {self.position[2]:.2f}] and waypoint[{self.target_waypoint.graph_index}]")
+                print(f"[update] Calling update_off_grid_position() with pose " \
+                      f"[{self.position_str()}] and waypoint[{self.target_waypoint.graph_index}]")
                 self.update_handle.update_off_grid_position(
                     self.position, self.target_waypoint.graph_index)
             else: # if robot is lost
                 print("[update] Calling update_lost_position()")
                 self.update_handle.update_lost_position(
-                    self.map_name, self.position)
+                    self.rmf_map_name, self.position)
+
+    def position_str(self):
+        return f"{self.position[0]:.2f}, {self.position[1]:.2f}, {self.position[2]:.2f}"
+
+    def get_closest_waypoint_idx(
+            self, position: Tuple[float, float, float],
+            max_merge_lane_distance = 40.0
+        ) -> Optional[int]:
+        """
+        Find closest graph waypoint to the provided position, return waypoint idx
+        """
+        starts = plan.compute_plan_starts(
+            self.graph,
+            self.rmf_map_name,
+            position,
+            self.adapter.now(),
+            max_merge_waypoint_distance = 1.0,
+            max_merge_lane_distance = max_merge_lane_distance)
+        if not starts:
+            return None
+        cx, cy, _ = position
+        closest_idx = -1
+        closest_dist_sq = max_merge_lane_distance**2
+        for s in starts:
+            idx = s.waypoint
+            x, y = self.graph.get_waypoint(idx).location
+            dist_sq = (x-cx)**2 + (y-cy)**2
+            if (dist_sq < closest_dist_sq):
+                closest_idx = idx
+                closest_dist_sq = dist_sq
+        return closest_idx
 
     def get_current_lane(self):
         def projection(current_position,
@@ -519,6 +579,7 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                 return lane_index
         return None
 
+    # TODO: remove the usage of sqrt for efficiency
     def dist(self, A, B):
         ''' Euclidian distance between A(x,y) and B(x,y)'''
         assert(len(A) > 1)

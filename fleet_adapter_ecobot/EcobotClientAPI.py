@@ -140,6 +140,10 @@ class EcobotAPI:
 
     def start_clean(self, name:str, map_name:str):
         ''' Returns True if the robot has started the cleaning process, else False'''
+        return self.start_task(self, name, map_name)
+
+
+    def start_task(self, name:str, map_name:str):
         # we first get the relevant task queue and then start a new task
         data = {}
         response = self.task_queues(map_name)
@@ -213,6 +217,23 @@ class EcobotAPI:
             print(f"Other error: {err}")
         return False
 
+    def current_map(self):
+        url = self.prefix + f"/gs-robot/real_time_data/robot_status"
+        try:
+            response = requests.get(url, timeout=self.timeout)
+            response.raise_for_status()
+            if self.debug:
+                # print(f"Response: \n {response.json()}")
+                print(json.dumps(response.json(), indent=2))
+
+            return response.json()["data"]["robotStatus"]["map"]["name"]
+        except HTTPError as http_err:
+            print(f"HTTP error: {http_err}")
+        except Exception as err:
+            print(f"Other error: {err}")
+        return None
+
+
     def data(self):
         url = self.prefix + f"/gs-robot/data/device_status"
         try:
@@ -273,7 +294,7 @@ class EcobotAPI:
     def navigation_completed(self):
         return self.is_task_queue_finished()
 
-    def docking_completed(self):
+    def task_completed(self):
         ''' For ecobots the same function is used to check completion of navigation & cleaning'''
         return self.is_task_queue_finished()
 
@@ -297,3 +318,5 @@ class EcobotAPI:
         except Exception as err:
             print(f"Other error: {err}")
         return False
+
+    ## TODO: check is charge
