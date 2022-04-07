@@ -140,7 +140,7 @@ class EcobotAPI:
 
     def start_clean(self, name:str, map_name:str):
         ''' Returns True if the robot has started the cleaning process, else False'''
-        return self.start_task(self, name, map_name)
+        return self.start_task(name, map_name)
 
 
     def start_task(self, name:str, map_name:str):
@@ -319,4 +319,10 @@ class EcobotAPI:
             print(f"Other error: {err}")
         return False
 
-    ## TODO: check is charge
+    def is_charging(self):
+        """Check if robot is charging, will return false if not charging, or not avail"""
+        response = self.data()
+        if response is not None:
+            return response["data"]["charge"]
+        else:
+            return False

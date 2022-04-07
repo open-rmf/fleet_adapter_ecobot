@@ -255,7 +255,7 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                                 # self.target_waypoint = None
                             else:
                                 if self.path_index is not None:
-                                    self.node.get_logger().info(f"Waiting for {(waypoint_wait_time - time_now).seconds}s")
+                                    # self.node.get_logger().info(f"Waiting for {(waypoint_wait_time - time_now).seconds}s")
                                     self.next_arrival_estimator(self.path_index, timedelta(seconds=0.0))
 
 
@@ -402,13 +402,14 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                 self.node.get_logger().info(f"Requesting robot {self.name} to clean {description}")
                 self.api.set_cleaning_mode(self.config['active_cleaning_config'])
                 if self.api.start_clean(description["clean_task_name"], self.map_name):
+                    self.node.get_logger().warn(f"Robot {self.name} start cleaning action")
                     self.start_clean_action_time = self.adapter.now()
                     self.on_waypoint = None
                     self.on_lane = None
                     self.action_execution = execution
                     # robot moves slower during cleaning
                     self.vehicle_traits.linear.nominal_velocity *= 0.2
-                    break
+                    return
                 attempts+=1
                 time.sleep(1.0)
             self.node.get_logger().warn(f"Failed to initiate cleaning action for robot {self.name}")
