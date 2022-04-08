@@ -64,7 +64,18 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                  charger_waypoint,
                  update_frequency,
                  adapter,
-                 api):
+                 api,
+                 max_merge_lane_distance):
+        """
+        :param config
+            robot config defined in yaml file
+        :param map_name
+            map name in ecobot system
+        :param rmf_map_name
+            map name in rmf
+        :param max_merge_lane_distance
+            means how far will the robot diverge from the defined graph
+        """
         adpt.RobotCommandHandle.__init__(self)
         self.name = name
         self.config = config
@@ -74,6 +85,7 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
         self.transforms = transforms
         self.map_name = map_name
         self.rmf_map_name = rmf_map_name
+        self.max_merge_lane_distance = max_merge_lane_distance
 
         # Get the index of the charger waypoint
         waypoint = self.graph.find_waypoint(charger_waypoint)
@@ -117,8 +129,10 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
 
         self.action_execution = None
         self.participant = None
+        self.in_error = None
+        self.update_robot_status_count = 0 # currently will update robot status every 4 callback counts
 
-        print(f"{self.name} is starting at: [{self.position[0]:.2f}, {self.position[1]:.2f}, {self.position[2]:.2f}")
+        print(f"{self.name} is starting at: [{self.position_str()}]")
 
         self.state_update_timer = self.node.create_timer(
             1.0 / self.update_frequency,
@@ -212,7 +226,9 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
 
         def _follow_path():
             target_pose = []
-            while (self.remaining_waypoints or self.state == EcobotState.MOVING or self.state == EcobotState.WAITING):
+            while (self.remaining_waypoints or
+                   self.state == EcobotState.MOVING or
+                   self.state == EcobotState.WAITING):
                 # Check if we need to abort
                 if self._quit_path_event.is_set():
                     self.node.get_logger().info("Aborting previously followed path")
@@ -241,7 +257,9 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                         #     if self.on_waypoint is not None: # robot starts at a graph waypoint
                         #         self.last_known_waypoint_index = self.on_waypoint
                     else:
-                        self.node.get_logger().info(f"Robot {self.name} failed to navigate to [{x:.0f}, {y:.0f}, {theta:.0f}] grid coordinates. Retrying...")
+                        self.node.get_logger().info(
+                            f"Robot {self.name} failed to navigate to [{x:.0f}, {y:.0f}, {theta:.0f}]" \
+                            "grid coordinates. Retrying...")
                         time.sleep(1.0)
 
                 elif self.state == EcobotState.WAITING:
@@ -414,6 +432,8 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                 time.sleep(1.0)
             self.node.get_logger().warn(f"Failed to initiate cleaning action for robot {self.name}")
             # TODO: issue error ticket
+            # create_issue(()
+            self.in_error = True # TODO: toggle error back
             execution.error("Failed to initiate cleaning action for robot {self.name}")
 
     def update_state(self):
@@ -432,6 +452,22 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
             self.update_handle.set_action_executor(self._action_executor)
             self.charger_is_set = True
             self.participant = self.update_handle.get_unstable_participant()
+
+        # Update robot state's status, this will show on the dashboard, update this every 4 callbacks
+        # TODO: in a seperate callback timer?
+        if (self.update_robot_status_count >= 4):
+            if self.api.is_charging():
+                self.update_handle.override_status("charging")
+            elif self.in_error:
+                self.update_handle.override_status("error")
+            elif not self.api.is_localize():
+                self.node.get_logger().warn(f"Robot {self.name} is not localized")
+                self.update_handle.override_status("error")
+            else:
+                self.update_handle.override_status(None)
+            self.update_robot_status_count = 0
+        else:
+            self.update_robot_status_count += 1
 
         # Update states and positions
         with self._lock:
@@ -466,10 +502,11 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                     # using the front() of the starts list, it the first start might not be the nearest
                     # self.update_handle.update_lost_position(
                     #     self.rmf_map_name, self.position,
-                    #     max_merge_waypoint_distance = 1.0, max_merge_lane_distance=15.0)
+                    #     max_merge_waypoint_distance = 1.0, max_merge_lane_distance)
 
                     ## Get Closest point on graph and update location
-                    closest_wp = self.get_closest_waypoint_idx(self.position)
+                    closest_wp = self.get_closest_waypoint_idx(
+                        self.position, self.max_merge_lane_distance)
                     if closest_wp:
                         self.update_handle.update_off_grid_position(
                             self.position, closest_wp)
@@ -516,16 +553,21 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                 self.update_handle.update_off_grid_position(
                     self.position, self.target_waypoint.graph_index)
             else: # if robot is lost
+                # TODO: use get_closest_waypoint_idx()
                 print("[update] Calling update_lost_position()")
                 self.update_handle.update_lost_position(
                     self.rmf_map_name, self.position)
+
+    ########################################################################
+    ## Utils
+    ########################################################################
 
     def position_str(self):
         return f"{self.position[0]:.2f}, {self.position[1]:.2f}, {self.position[2]:.2f}"
 
     def get_closest_waypoint_idx(
             self, position: Tuple[float, float, float],
-            max_merge_lane_distance = 40.0
+            max_merge_lane_distance = 10.0
         ) -> Optional[int]:
         """
         Find closest graph waypoint to the provided position, return waypoint idx

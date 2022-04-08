@@ -46,7 +46,7 @@ class ClientAPI:
         self.clean_wp_idx = 0
         print("[TEST ECOBOT CLIENT API] successfully setup fake client api class")
         self.connected = True
-        # self.fake_location = [977, 1372, 0 ]
+        self.dock_position = [977, 1372]
         self.fake_location = [977.5834309628409, 1192.0576445043025, 0]
 
     def position(self):
@@ -78,6 +78,7 @@ class ClientAPI:
         ''' Returns True if the robot has started the generic task, else False'''
         print(f"[TEST CLIENT API] Start fake task : {name}")
         self.fake_location = [977, 1372, 0 ] # assume original charging waypoint
+        self.is_at_dock = True
         return True
 
     def start_clean(self, name:str, map_name:str):
@@ -133,4 +134,14 @@ class ClientAPI:
         print(f"[TEST CLIENT API] Set fake CLEANING MODE: {cleaning_config}")
         return True
 
-    ## TODO: check is charge
+    def is_charging(self):
+        """Check if robot is charging, will return false if not charging, None if not avail"""
+        dx, dy, = self.dock_position
+        x, y, _= self.fake_location
+        if (abs(x-dx) < 5.0 and abs(y-dy) < 5.0):
+            print(f"[TEST CLIENT API] Fake robot at dock, is charging")
+            return True
+        return False
+
+    def is_localize(self):
+        return True

@@ -225,6 +225,10 @@ def initialize_fleet(config_yaml, nav_graph_path, node, server_uri, args):
                 else:
                     rmf_map_name = rmf_config['start']['rmf_map_name']
 
+                # TODO: this is to find the robot location when offgrid
+                # add this to config
+                max_merge_lane_distance = 15.0 # meters
+
                 if (initial_waypoint is not None) and\
                         (initial_orientation is not None):
                     node.get_logger().info(
@@ -246,7 +250,9 @@ def initialize_fleet(config_yaml, nav_graph_path, node, server_uri, args):
                         nav_graph,
                         rmf_map_name,
                         position,
-                        time_now)
+                        time_now,
+                        max_merge_waypoint_distance = 1.0,
+                        max_merge_lane_distance = max_merge_lane_distance)
 
                 if starts is None or len(starts) == 0:
                     node.get_logger().error(
@@ -268,7 +274,8 @@ def initialize_fleet(config_yaml, nav_graph_path, node, server_uri, args):
                     update_frequency=rmf_config.get(
                         'robot_state_update_frequency', 1),
                     adapter=adapter,
-                    api=api)
+                    api=api,
+                    max_merge_lane_distance=max_merge_lane_distance)
 
                 if robot.initialized:
                     robots[robot_name] = robot
