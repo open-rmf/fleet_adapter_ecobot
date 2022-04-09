@@ -179,7 +179,7 @@ def initialize_fleet(config_yaml, nav_graph_path, node, server_uri, args):
 
     def updater_inserter(cmd_handle, update_handle):
         """Insert a RobotUpdateHandle."""
-        cmd_handle.update_handle = update_handle
+        cmd_handle.init_handler(update_handle)
 
     # Initialize robots for this fleet
     missing_robots = config_yaml['robots']
@@ -209,8 +209,6 @@ def initialize_fleet(config_yaml, nav_graph_path, node, server_uri, args):
 
                 node.get_logger().info(f"Initializing robot: {robot_name}")
                 rmf_config = missing_robots[robot_name]['rmf_config']
-                initial_waypoint = rmf_config['start']['waypoint']
-                initial_orientation = rmf_config['start']['orientation']
 
                 starts = []
                 time_now = adapter.now()
@@ -225,34 +223,17 @@ def initialize_fleet(config_yaml, nav_graph_path, node, server_uri, args):
                 else:
                     rmf_map_name = rmf_config['start']['rmf_map_name']
 
-                # TODO: this is to find the robot location when offgrid
-                # add this to config
-                max_merge_lane_distance = 15.0 # meters
-
-                if (initial_waypoint is not None) and\
-                        (initial_orientation is not None):
-                    node.get_logger().info(
-                        f"Using provided initial waypoint "
-                        "[{initial_waypoint}] "
-                        f"and orientation [{initial_orientation:.2f}] to "
-                        f"initialize starts for robot [{robot_name}]")
-                    # Get the waypoint index for initial_waypoint
-                    initial_waypoint_index = nav_graph.find_waypoint(
-                        initial_waypoint).index
-                    starts = [plan.Start(time_now,
-                                            initial_waypoint_index,
-                                            initial_orientation)]
-                else:
-                    node.get_logger().info(
-                        f"Running compute_plan_starts for robot: "
-                        f"{robot_name}, with pos: {position}")
-                    starts = plan.compute_plan_starts(
-                        nav_graph,
-                        rmf_map_name,
-                        position,
-                        time_now,
-                        max_merge_waypoint_distance = 1.0,
-                        max_merge_lane_distance = max_merge_lane_distance)
+                # Identify the current location of the robot in rmf's graph
+                node.get_logger().info(
+                    f"Running compute_plan_starts for robot: "
+                    f"{robot_name}, with pos: {position}")
+                starts = plan.compute_plan_starts(
+                    nav_graph,
+                    rmf_map_name,
+                    position,
+                    time_now,
+                    max_merge_waypoint_distance = 1.0,
+                    max_merge_lane_distance = rmf_config["max_merge_lane_distance"])
 
                 if starts is None or len(starts) == 0:
                     node.get_logger().error(
@@ -275,26 +256,19 @@ def initialize_fleet(config_yaml, nav_graph_path, node, server_uri, args):
                         'robot_state_update_frequency', 1),
                     adapter=adapter,
                     api=api,
-                    max_merge_lane_distance=max_merge_lane_distance)
+                    max_merge_lane_distance=rmf_config["max_merge_lane_distance"])
 
-                if robot.initialized:
-                    robots[robot_name] = robot
-                    # Add robot to fleet
-                    fleet_handle.add_robot(robot,
-                                            robot_name,
-                                            profile,
-                                            starts,
-                                            partial(updater_inserter,
-                                                    robot))
-                    node.get_logger().info(
-                        f"Successfully added new robot: {robot_name}")
-
-                else:
-                    node.get_logger().error(
-                        f"Failed to initialize robot: {robot_name}")
-
+                robots[robot_name] = robot
+                # Add robot to fleet
+                fleet_handle.add_robot(robot,
+                                        robot_name,
+                                        profile,
+                                        starts,
+                                        partial(updater_inserter,
+                                                robot))
+                node.get_logger().info(
+                    f"Successfully added new robot: {robot_name}")
                 del missing_robots[robot_name]
-
         return
 
     add_robots = threading.Thread(target=_add_fleet_robots, args=())

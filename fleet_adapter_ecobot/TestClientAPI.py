@@ -28,11 +28,6 @@ class ClientAPI:
             [1027.0187, 1271.659514, -30],
             [1027.0187, 1271.659514, -100],
             [1027.0187, 1271.659514, -60],
-            [1027.0187, 671.659514, -30],
-            [1027.0187, 671.659514, -60],
-            [1027.0187, 671.659514, -100],
-            [1027.0187, 671.659514, -60],
-            [1027.0187, 671.659514, -30],
             [500.0187, 905.659514, 0],
             [500.0187, 905.659514, 20],
             [500.0187, 905.659514, 40],
@@ -40,20 +35,35 @@ class ClientAPI:
             [500.0187, 905.659514, 80],
             [500.0187, 905.659514, 100],
             [936.238485, 981.95061, 0],
-            [909.963465, 1139.7444, 180]
+            [709.963465, 1139.7444, 180]
+        ]
+        self.fake_dock_path = [
+            [968.51, 1325.25, 0],
+            [965.21, 1338.18, 0],
+            [963.21, 1348.18, 0],
+            [962.59, 1360.78, 0],
+            [960.59, 1370.78, 0],
+            [960.59, 1363.78, 0],
+            [964.36, 1356.75, 0]
         ]
         self.is_fake_cleaning = False
-        self.clean_wp_idx = 0
+        self.is_fake_docking = False
+        self.task_wp_idx = 0
+        self.task_wp_idx = 0
         print("[TEST ECOBOT CLIENT API] successfully setup fake client api class")
         self.connected = True
-        self.dock_position = [977, 1372]
-        self.fake_location = [977.5834309628409, 1192.0576445043025, 0]
+        self.dock_position = [977, 1372, 0]
+        # self.fake_location = [977.5834, 1192.0576, 0]
+        self.fake_location = [1072.43, 899.82, 0] #Offgrid start
 
     def position(self):
         ''' Returns [x, y, theta] expressed in the robot's coordinate frame or None'''
         if self.is_fake_cleaning:
             print(f"[TEST CLIENT API] provide fake cleaning position")
-            return self.fake_clean_path[self.clean_wp_idx]
+            return self.fake_clean_path[self.task_wp_idx]
+        elif self.is_fake_docking:
+            print(f"[TEST CLIENT API] provide fake docking position")
+            return self.fake_dock_path[self.task_wp_idx]
         print(f"[TEST CLIENT API] provide position [{self.fake_location}]")
         return self.fake_location
 
@@ -70,15 +80,13 @@ class ClientAPI:
         ''' Ask the robot to navigate to a preconfigured waypoint on a map.
             Returns True if the robot received the command'''
         print(f"[TEST CLIENT API] moved to fake waypoint {waypoint_name}")
-        self.fake_location = [977, 1372, 0 ] # assume original charging waypoint
-        self.attempts = 0
+        self.is_fake_docking = True
         return True
 
     def start_task(self, name:str, map_name:str):
         ''' Returns True if the robot has started the generic task, else False'''
         print(f"[TEST CLIENT API] Start fake task : {name}")
-        self.fake_location = [977, 1372, 0 ] # assume original charging waypoint
-        self.is_at_dock = True
+        self.is_fake_docking = True
         return True
 
     def start_clean(self, name:str, map_name:str):
@@ -108,23 +116,26 @@ class ClientAPI:
 
     def task_completed(self):
         ''' For ecobots the same function is used to check completion of navigation & cleaning'''
-        if not self.is_fake_cleaning: # note, if immediately, the robot will head back to staging point
-            if self.attempts < 4:
-                print(f"[TEST CLIENT API] Fake task in process")
-                self.attempts += 1
+        self.task_wp_idx += 1
+        if self.is_fake_docking:
+            if self.task_wp_idx < len(self.fake_dock_path):
+                print(f"[TEST CLIENT API] Fake nav/dock task in process")
                 return False
             else:
-                print(f"[TEST CLIENT API] No fake task in process")
+                self.task_wp_idx = 0
+                self.is_fake_docking = False
+                self.fake_location = self.dock_position
+                print(f"[TEST CLIENT API] Fake nav/dock task COMPLETED")
                 return True
-        self.clean_wp_idx += 1
-        if self.clean_wp_idx < len(self.fake_clean_path):
-            print(f"[TEST CLIENT API] FAKE DOCK/CLEAN in process")
-            return False
         else:
-            self.clean_wp_idx = 0
-            self.is_fake_cleaning = False
-            print(f"[TEST CLIENT API] FAKE DOCK/CLean completed")
-            return True
+            if self.task_wp_idx < len(self.fake_clean_path):
+                print(f"[TEST CLIENT API] FAKE CLEANING in process")
+                return False
+            else:
+                self.task_wp_idx = 0
+                self.is_fake_cleaning = False
+                print(f"[TEST CLIENT API] FAKE CLEANING completed")
+                return True
 
     def battery_soc(self):
         print(f"[TEST CLIENT API] get fake battery 100%")
@@ -136,7 +147,7 @@ class ClientAPI:
 
     def is_charging(self):
         """Check if robot is charging, will return false if not charging, None if not avail"""
-        dx, dy, = self.dock_position
+        dx, dy, _ = self.dock_position
         x, y, _= self.fake_location
         if (abs(x-dx) < 5.0 and abs(y-dy) < 5.0):
             print(f"[TEST CLIENT API] Fake robot at dock, is charging")
