@@ -140,9 +140,18 @@ def initialize_fleet(config_yaml, nav_graph_path, node, server_uri, args):
         partial(_task_request_check, task_capabilities))
 
     def _consider(description: dict):
+        confirm = adpt.fleet_update_handle.Confirmation()
+
+        # Currently there's no way for user to submit a robot_task_request
+        # .json file via the rmf-web dashboard. Thus the short term solution
+        # is to add the fleet_name info into action description. NOTE
+        # only matching fleet_name action will get accepted
+        if (description["category"] == "manual_control" and
+            description["description"]["fleet_name"] != fleet_name):
+                return confirm
+
         node.get_logger().warn(
             f"Accepting action: {description} ")
-        confirm = adpt.fleet_update_handle.Confirmation()
         confirm.accept()
         return confirm
 

@@ -126,6 +126,7 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
         self.action_execution = None
         self.in_error = False
         self.is_online = False
+        self.action_category = None
 
         print(f"{self.name} is starting at: [{self.position_str()}]")
 
@@ -363,6 +364,7 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
         # NOTE: Docking called when robot is heading back to charger
         self.target_waypoint.graph_index = self.charger_waypoint.index
         self.on_waypoint = None
+        self.on_lane = None
         def _dock():
             # TODO, clean up implementation of dock
             # Check if the dock waypoint is a charger or cleaning zone and call the
@@ -432,28 +434,39 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                         execution:
                         adpt.robot_update_handle.ActionExecution):
         with self._lock:
-            # only accept clean category
-            assert(category == "clean")
-            attempts = 0
-            while attempts < 2:
-                self.node.get_logger().info(f"Requesting robot {self.name} to clean {description}")
+            # only accept clean and manual_control
+            assert(category in ["clean", "manual_control"])
+
+            self.action_category = category
+            if (category == "clean"):
+                attempts = 0
                 self.api.set_cleaning_mode(self.config['active_cleaning_config'])
-                if self.api.start_clean(description["clean_task_name"], self.map_name):
-                    self.node.get_logger().warn(f"Robot {self.name} start cleaning action")
-                    self.start_clean_action_time = self.adapter.now()
-                    self.on_waypoint = None
-                    self.on_lane = None
-                    self.action_execution = execution
-                    # robot moves slower during cleaning
-                    self.vehicle_traits.linear.nominal_velocity *= 0.2
-                    return
-                attempts+=1
-                time.sleep(1.0)
-            self.node.get_logger().warn(f"Failed to initiate cleaning action for robot {self.name}")
-            # TODO: issue error ticket
-            # create_issue(()
-            self.in_error = True # TODO: toggle error back
-            execution.error("Failed to initiate cleaning action for robot {self.name}")
+                while True:
+                    self.node.get_logger().info(f"Requesting robot {self.name} to clean {description}")
+                    if self.api.start_clean(description["clean_task_name"], self.map_name):
+                        self.check_task_completion = self.api.task_completed # will check api
+                        break
+                    if (attempts > 3):
+                        self.node.get_logger().warn(
+                            f"Failed to initiate cleaning action for robot [{self.name}]")
+                        # TODO: issue error ticket
+                        self.in_error = True # TODO: toggle error back
+                        execution.error("Failed to initiate cleaning action for robot {self.name}")
+                        execution.finished()
+                        return
+                    attempts+=1
+                    time.sleep(1.0)
+            elif (category == "manual_control"):
+                self.check_task_completion = lambda:False  # user can only cancel the manual_control
+
+            # start Perform Action
+            self.node.get_logger().warn(f"Robot [{self.name}] starts [{category}] action")
+            self.start_action_time = self.adapter.now()
+            self.on_waypoint = None
+            self.on_lane = None
+            self.action_execution = execution
+            # robot moves slower during perform action
+            self.vehicle_traits.linear.nominal_velocity *= 0.2
 
 
     # Update robot state's status
@@ -480,25 +493,25 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
         # Update states and positions
         with self._lock:
             if (self.action_execution):
-                print("Executing action, cleaning state")
+                print(f"Executing perform action [{self.action_category}]")
                 # check if action is completed/killed/canceled
                 action_ok = self.action_execution.okay()
-                if self.api.task_completed() or not action_ok:
+                if self.check_task_completion() or not action_ok:
                     if action_ok:
-                        self.node.get_logger().info("Cleaning is completed")
+                        self.node.get_logger().info(f"action [{self.action_category}] is completed")
                         self.action_execution.finished()
                     else:
-                        self.node.get_logger().warn("cleaning task is killed/canceled")
+                        self.node.get_logger().warn(f"action [{self.action_category}] is killed/canceled")
                     self.api.set_cleaning_mode(self.config['inactive_cleaning_config'])
                     self.action_execution = None
-                    self.start_clean_action_time = None
+                    self.start_action_time = None
                     self.vehicle_traits.linear.nominal_velocity *= 5 # change back vel
                 else:
                     assert(self.participant)
-                    assert(self.start_clean_action_time)
-                    total_action_time = timedelta(hours=1.0)  #TODO: populate actual total time``
-                    remaining_time = total_action_time - (self.adapter.now() - self.start_clean_action_time)
-                    print(f"Still cleaning =) Estimated remaining time: [{remaining_time}]")
+                    assert(self.start_action_time)
+                    total_action_time = timedelta(hours=1.0)  #TODO: populate actual total time
+                    remaining_time = total_action_time - (self.adapter.now() - self.start_action_time)
+                    print(f"Still performing action, Estimated remaining time: [{remaining_time}]")
                     self.action_execution.update_remaining_time(remaining_time)
 
                     # create a short segment of the trajectory according to robot current heading
