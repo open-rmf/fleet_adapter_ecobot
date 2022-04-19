@@ -18,6 +18,7 @@ import yaml
 import nudged
 import threading
 import time
+import math
 
 import rclpy
 import rclpy.node
@@ -191,7 +192,9 @@ def initialize_fleet(config_yaml, nav_graph_path, node, use_sim_time, server_uri
                     time_now = adapter.now()
 
                     x,y = transforms['ecobot_to_rmf'].transform([ecobot_pos[0],ecobot_pos[1]])
-                    position = [x, y, 0]
+                    theta = math.radians(ecobot_pos[2]) - transforms['orientation_offset']
+                    theta = (theta + math.pi) % (2*math.pi) - math.pi  #ensure within [-pi, pi]
+                    position = [x, y, theta]
 
                     if (initial_waypoint is not None) and\
                             (initial_orientation is not None):
