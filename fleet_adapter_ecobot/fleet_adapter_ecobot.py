@@ -18,6 +18,7 @@ import yaml
 import nudged
 import threading
 import time
+import math
 
 import rclpy
 import rclpy.node
@@ -180,8 +181,8 @@ def initialize_fleet(config_yaml, nav_graph_path, node, use_sim_time, server_uri
                 api = EcobotAPI(robot_config['base_url'], robot_config['cleaning_task_prefix'])
                 if not api.connected:
                     continue
-                position = api.position()
-                if position is not None and len(position) > 2:
+                ecobot_pos = api.position()
+                if ecobot_pos is not None and len(ecobot_pos) > 2:
                     node.get_logger().info(f"Initializing robot: {robot_name}")
                     rmf_config = missing_robots[robot_name]['rmf_config']
                     initial_waypoint = rmf_config['start']['waypoint']
@@ -189,6 +190,11 @@ def initialize_fleet(config_yaml, nav_graph_path, node, use_sim_time, server_uri
 
                     starts = []
                     time_now = adapter.now()
+
+                    x,y = transforms['ecobot_to_rmf'].transform([ecobot_pos[0],ecobot_pos[1]])
+                    theta = math.radians(ecobot_pos[2]) - transforms['orientation_offset']
+                    theta = (theta + math.pi) % (2*math.pi) - math.pi  #ensure within [-pi, pi]
+                    position = [x, y, theta]
 
                     if (initial_waypoint is not None) and\
                             (initial_orientation is not None):
@@ -240,7 +246,7 @@ def initialize_fleet(config_yaml, nav_graph_path, node, use_sim_time, server_uri
                         fleet_handle.add_robot(robot,
                                                robot_name,
                                                profile,
-                                               [starts[0]],
+                                               starts,
                                                partial(updater_inserter,
                                                        robot))
                         node.get_logger().info(
