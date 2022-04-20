@@ -15,7 +15,6 @@
 import sys
 import argparse
 import yaml
-import nudged
 import threading
 import time
 
@@ -163,29 +162,6 @@ def initialize_fleet(config_yaml, nav_graph_path, node, server_uri, args):
                 f" to perform action of category [{cat}]")
             fleet_handle.add_performable_action(cat, _consider)
 
-    # use defined transfrom param if avail, else use ref coors
-    if "rmf_transform" in config_yaml:
-        tx, ty, r, s = config_yaml["rmf_transform"]
-        rmf_transform = RmfMapTransform(tx, ty, r, s)
-        mse = 0.0 # null
-    else:
-        rmf_transform = RmfMapTransform()
-        rmf_coordinates = config_yaml['reference_coordinates']['rmf']
-        ecobot_coordinates = config_yaml['reference_coordinates']['ecobot']
-        mse = rmf_transform.estimate(ecobot_coordinates, rmf_coordinates)
-    tx, ty, r, s = rmf_transform.to_robot_map_transform()
-    print(f"Coordinate transformation error: {mse}")
-    print("RMF to Ecobot transform:")
-    print(f"    rotation:{r}")
-    print(f"    scale:{s}")
-    print(f"    trans:{tx}, {ty}")
-
-    tx, ty, r, s = rmf_transform.to_rmf_map_transform()
-    print("Ecobot to RMF transform:")
-    print(f"    rotation:{r}")
-    print(f"    scale:{s}")
-    print(f"    trans:{tx}, {ty}")
-
     def updater_inserter(cmd_handle, update_handle):
         """Insert a RobotUpdateHandle."""
         cmd_handle.init_handler(update_handle)
@@ -210,6 +186,33 @@ def initialize_fleet(config_yaml, nav_graph_path, node, server_uri, args):
                 if not api.connected:
                     continue
 
+                robot_map_name = api.current_map()
+                if robot_map_name is None:
+                    node.get_logger().warn(f"Failed to get robot map name: [{robot_map_name}]")
+                    continue
+
+                # use defined transfrom param if avail, else use ref coors
+                # note that the robot's map_name should be identical to the one in config
+                if "rmf_transform" in config_yaml:
+                    if robot_map_name not in config_yaml["rmf_transform"]:
+                        assert False, f"Robot map name: {robot_map_name} isnt defined in config"
+                    tx, ty, r, s = config_yaml["rmf_transform"][robot_map_name]["transform"]
+                    rmf_transform = RmfMapTransform(tx, ty, r, s)
+                    rmf_map_name = config_yaml["rmf_transform"][robot_map_name]['rmf_map_name']
+                else:
+                    rmf_transform = RmfMapTransform()
+                    rmf_coordinates = config_yaml['reference_coordinates']['rmf']
+                    ecobot_coordinates = config_yaml['reference_coordinates']['ecobot']
+                    rmf_map_name = config_yaml['reference_coordinates']['rmf_map_name']
+                    mse = rmf_transform.estimate(ecobot_coordinates, rmf_coordinates)
+                    print(f"Coordinate transformation error: {mse}")
+
+                print(f"Coordinate Transform from [{robot_map_name}] to [{rmf_map_name}]")
+                tx, ty, r, s = rmf_transform.to_robot_map_transform()
+                print(f"RMF to Ecobot transform :: trans [{tx}, {ty}]; rot {r}; scale {s}")
+                tx, ty, r, s = rmf_transform.to_rmf_map_transform()
+                print(f"Ecobot to RMF transform :: trans [{tx}, {ty}]; rot {r}; scale {s}")
+
                 # get robot coordinates and transform to rmf_coor
                 ecobot_pos = api.position()
                 if ecobot_pos is None:
@@ -224,13 +227,6 @@ def initialize_fleet(config_yaml, nav_graph_path, node, server_uri, args):
 
                 x,y,_ = rmf_transform.to_rmf_map([ecobot_pos[0],ecobot_pos[1], 0])
                 position = [x, y, 0]
-
-                # for backwards compatibility, check if rmf_map name is diff
-                # to robot's map name
-                if "rmf_map_name" not in rmf_config['start']:
-                    rmf_map_name = rmf_config['start']['map_name']
-                else:
-                    rmf_map_name = rmf_config['start']['rmf_map_name']
 
                 # Identify the current location of the robot in rmf's graph
                 node.get_logger().info(
@@ -257,7 +253,7 @@ def initialize_fleet(config_yaml, nav_graph_path, node, server_uri, args):
                     graph=nav_graph,
                     vehicle_traits=vehicle_traits,
                     transforms=rmf_transform,
-                    map_name=rmf_config['start']['map_name'],
+                    map_name=robot_map_name,
                     rmf_map_name=rmf_map_name,
                     position=position,
                     charger_waypoint=rmf_config['charger']['waypoint'],

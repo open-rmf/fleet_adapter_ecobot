@@ -24,18 +24,9 @@ class ClientAPI:
             [1056.7065, 1087.30105, 180],
             [1056.7065, 1087.30105, 150],
             [1056.7065, 1087.30105, 130],
-            [1027.0187, 1271.659514, -60],
-            [1027.0187, 1271.659514, -30],
-            [1027.0187, 1271.659514, -100],
-            [1027.0187, 1271.659514, -60],
-            [500.0187, 905.659514, 0],
-            [500.0187, 905.659514, 20],
-            [500.0187, 905.659514, 40],
-            [500.0187, 905.659514, 60],
-            [500.0187, 905.659514, 80],
-            [500.0187, 905.659514, 100],
-            [936.238485, 981.95061, 0],
-            [709.963465, 1139.7444, 180]
+            [801.63, 1492.17, 0],
+            [801.60, 1485.17, 20],
+            [801.55, 1475.17, 40],
         ]
         self.fake_dock_path = [
             [968.51, 1325.25, 0],
@@ -53,8 +44,13 @@ class ClientAPI:
         print("[TEST ECOBOT CLIENT API] successfully setup fake client api class")
         self.connected = True
         self.dock_position = [977, 1372, 0]
-        # self.fake_location = [977.5834, 1192.0576, 0]
-        self.fake_location = [1072.43, 899.82, 0] #Offgrid start
+        self.fake_location = [977.5834, 1192.0576, 0]
+        self.fake_robot_map_name = "sim_test_robot_map"
+        # self.fake_location = [1072.43, 899.82, 0] #Offgrid start
+
+    def current_map(self):
+        print(f"[TEST CLIENT API] return testing map: {self.fake_robot_map_name}")
+        return self.fake_robot_map_name
 
     def position(self):
         ''' Returns [x, y, theta] expressed in the robot's coordinate frame or None'''
