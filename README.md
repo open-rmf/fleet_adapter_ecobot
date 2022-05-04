@@ -23,6 +23,11 @@ ros2 run fleet_adapter_ecobot fleet_adapter_ecobot -c CONFIG_FILE -n NAV_GRAPH
 
 ```
 
+Dispatch a Task
+```
+ros2 run rmf_demos_tasks dispatch_action -s lounge -a clean -ad '{ "clean_task_name": "clean_lounge" }'
+```
+
 ## Test the fleet adapter in simulation
 The adapter can be tested in simulation with the help of the [ecobot_sim_server](fleet_adapter_ecobot/ecobot_sim_server.py).
 This script emulates the API server of the robot and can be used to command robots in simulation to follow commands from Open-RMF.
@@ -39,3 +44,11 @@ ros2 run fleet_adapter_ecobot fleet_adapter_ecobot -c CONFIG_FILE -n NAV_GRAPH -
 ```
 
 Ensure that the `base_url` in the config matches the `LOCALHOST:PORT` specified to the server.
+
+## Get the Transformation from `traffic-editor`
+
+To get the transformation of the robot map to rmf map, user can add a "floorplan" of a robot map. Then annotate and the corresponding "constraint-pairs", lastly ctrl-T to let traffic-editor calculate the respective transformation.
+
+![](../media/media/traffic-editor-transform.png)
+
+Specify this transformation to the `rmf_transform` in the `config.yaml` file. Note that the value of Y-axis is applied with a -ve.

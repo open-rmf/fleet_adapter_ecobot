@@ -323,10 +323,13 @@ class EcobotAPI:
         """Check if robot is charging, will return false if not charging, None if not avail"""
         response = self.data()
         if response is not None:
-            return response["data"]["charge"]
+            # return response["data"]["charge"] # Faced an edge case: robot didnt dock well
+            if response["data"]["chargerCurrent"] > 0.0:
+                return True
+            else:
+                return False
         else:
             return None
-
 
     def is_localize(self):
         """Check if robot is localize, will return false if not charging, None if not avail"""

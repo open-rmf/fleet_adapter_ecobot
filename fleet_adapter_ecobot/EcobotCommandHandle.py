@@ -29,7 +29,7 @@ import time
 
 from datetime import timedelta
 
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 # States for EcobotCommandHandle's state machine used when guiding robot along
 # a new path
@@ -58,9 +58,6 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                  graph,
                  vehicle_traits,
                  transforms,
-                 map_name,
-                 rmf_map_name,
-                 position,
                  charger_waypoint,
                  update_frequency,
                  adapter,
@@ -69,10 +66,6 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
         """
         :param config
             robot config defined in yaml file
-        :param map_name
-            map name in ecobot system
-        :param rmf_map_name
-            map name in rmf
         :param max_merge_lane_distance
             means how far will the robot diverge from the defined graph
         """
@@ -83,8 +76,6 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
         self.graph = graph
         self.vehicle_traits = vehicle_traits
         self.transforms = transforms
-        self.map_name = map_name
-        self.rmf_map_name = rmf_map_name
         self.max_merge_lane_distance = max_merge_lane_distance
 
         # Get the index of the charger waypoint
@@ -97,7 +88,6 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
         self.update_handle = None # RobotUpdateHandle
         self.battery_soc = 1.0
         self.api = api
-        self.position = position # (x,y,theta) in RMF coordinates (meters, radians)
         self.state = EcobotState.IDLE
         self.adapter = adapter
 
@@ -128,6 +118,14 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
         self.is_online = False
         self.action_category = None
 
+        # Get the latest position (x,y,theta) in RMF coordinates (meters, radians)
+        robot_pos = self.get_robot_position()
+        while robot_pos is None:
+            print("Not able to retrieve latest position, trying again...")
+            time.sleep(2.0)
+            robot_pos = self.get_robot_position()
+
+        self.position = robot_pos
         print(f"{self.name} is starting at: [{self.position_str()}]")
 
         # The Ecobot robot has various cleaning modes. Here we turn off the
@@ -260,7 +258,7 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                     self.path_index = self.remaining_waypoints[0].index
                     # Move robot to next waypoint
                     target_pose =  self.target_waypoint.position
-                    [x,y, yaw] = self.transforms.to_robot_map(target_pose[:3])
+                    [x,y, yaw] = self.transforms[self.robot_map_name]["tf"].to_robot_map(target_pose[:3])
                     theta = math.degrees(yaw)
 
                     print(f"Requesting robot to navigate to "
@@ -268,7 +266,7 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                         f"grid coordinates and [{target_pose[0]:.2f}. {target_pose[1]:.2f}, {target_pose[2]:.2f}] "
                         f"RMF coordinates...")
 
-                    response = self.api.navigate([x, y, theta], self.map_name)
+                    response = self.api.navigate([x, y, theta], self.robot_map_name)
                     if response:
                         self.remaining_waypoints = self.remaining_waypoints[1:]
                         self.state = EcobotState.MOVING
@@ -318,7 +316,8 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                             else:
                                 # The robot may either be on the previous
                                 # waypoint or the target one
-                                if self.target_waypoint.graph_index is not None and self.dist(self.position, target_pose) < 0.5:
+                                if (self.target_waypoint.graph_index is not None and 
+                                    self.dist(self.position, target_pose) < 0.5):
                                     self.on_waypoint = self.target_waypoint.graph_index
                                 elif self.last_known_waypoint_index is not None and \
                                         self.dist(self.position, self.graph.get_waypoint(self.last_known_waypoint_index).location) < 0.5:
@@ -376,12 +375,12 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                 # named the same as the dock name (charger_ecobot75_x)
                 if self.name[:8] == "ecobot75":
                     self.api.set_cleaning_mode(self.config['inactive_cleaning_config'])
-                    if self.api.start_task(dock_name, self.map_name):
+                    if self.api.start_task(dock_name, self.robot_map_name):
                         break
                 # For Ecobot40 and 50, we will use the navigate_to_waypoint API to
                 # dock into the charger
                 else:
-                    if self.api.navigate_to_waypoint(dock_name, self.map_name):
+                    if self.api.navigate_to_waypoint(dock_name, self.robot_map_name):
                         break
                 time.sleep(1.0)
             while (not self.api.task_completed()):
@@ -401,19 +400,33 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
         self._dock_thread.start()
 
 
-    def get_position(self):
+    def get_robot_position(self) -> List[int]:
         ''' This helper function returns the live position of the robot in the
-        RMF coordinate frame'''
+        RMF coordinate frame
+        '''
         position = self.api.position()
-        if position is not None:
-            x,y,theta = self.transforms.to_rmf_map([position[0],position[1], math.radians(position[2])])
-            print(f"Convert pos from {position} grid coor to {x},{y}, {theta} rmf coor")
-            self.is_online = True
-            return [x,y,theta]
-        else:
-            self.node.get_logger().error("Unable to retrieve position from robot. Returning last known position...")
+        map_name = self.api.current_map()
+
+        if position is None or map_name is None:
+            self.node.get_logger().error(
+                "Unable to retrieve position from robot. Returning last known position...")
             self.is_online = False
             return self.position
+
+        if map_name not in self.transforms:
+            self.node.get_logger().error(
+                f"Robot map name [{map_name}] is not known. return last known position.")
+            self.is_online = True
+            return self.position
+
+        tf = self.transforms[map_name]
+        x,y,theta = tf['tf'].to_rmf_map([position[0],position[1], math.radians(position[2])])
+        print(f"Convert pos from {position} grid coor to {x},{y}, {theta} rmf coor")
+        self.is_online = True
+        # will update the member function directly
+        self.robot_map_name = map_name
+        self.rmf_map_name = tf['rmf_map_name']
+        return [x,y,theta]
 
 
     def get_battery_soc(self):
@@ -443,7 +456,7 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                 self.api.set_cleaning_mode(self.config['active_cleaning_config'])
                 while True:
                     self.node.get_logger().info(f"Requesting robot {self.name} to clean {description}")
-                    if self.api.start_clean(description["clean_task_name"], self.map_name):
+                    if self.api.start_clean(description["clean_task_name"], self.robot_map_name):
                         self.check_task_completion = self.api.task_completed # will check api
                         break
                     if (attempts > 3):
@@ -486,7 +499,7 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
 
     # Update location and check cleaning action
     def update_location(self):
-        self.position = self.get_position()
+        self.position = self.get_robot_position()
         self.battery_soc = self.get_battery_soc()
         self.update_handle.update_battery_soc(self.battery_soc)
 
@@ -540,7 +553,7 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                         self.vehicle_traits,
                         self.adapter.now(),
                         positions)
-                    route = schedule.Route(self.rmf_map_name,trajectory)
+                    route = schedule.Route(self.rmf_map_name, trajectory)
                     self.participant.set_itinerary([route])
             elif (self.on_waypoint is not None): # if robot is on a waypoint
                 print(f"[update] Calling update_current_waypoint() on waypoint with " \
@@ -563,7 +576,8 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                       f"and lanes:{lane_indices}")
                 self.update_handle.update_current_lanes(
                     self.position, lane_indices)
-            elif (self.target_waypoint is not None and self.target_waypoint.graph_index is not None): # if robot is merging into a waypoint
+            # if robot is merging into a waypoint
+            elif (self.target_waypoint is not None and self.target_waypoint.graph_index is not None):
                 print(f"[update] Calling update_off_grid_position() with pose " \
                       f"[{self.position_str()}] and waypoint[{self.target_waypoint.graph_index}]")
                 self.update_handle.update_off_grid_position(
