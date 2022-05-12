@@ -17,6 +17,7 @@ import argparse
 import yaml
 import threading
 import time
+import faulthandler
 
 import rclpy
 import rclpy.node
@@ -295,6 +296,7 @@ def main(argv=sys.argv):
     # Init rclpy and adapter
     rclpy.init(args=argv)
     adpt.init_rclcpp()
+    faulthandler.enable()
     args_without_ros = rclpy.utilities.remove_ros_args(argv)
 
     parser = argparse.ArgumentParser(

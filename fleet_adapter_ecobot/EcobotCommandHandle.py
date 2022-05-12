@@ -532,20 +532,19 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                     fake_pos = [_x + math.cos(_theta)*2.5, _y + math.sin(_theta)*2.5, _theta]
                     positions = [self.position, fake_pos] 
 
-                    # update robot current location with lost position, TODO: fix this as it is
-                    # using the front() of the starts list, it the first start might not be the nearest
-                    # self.update_handle.update_lost_position(
-                    #     self.rmf_map_name, self.position,
-                    #     max_merge_waypoint_distance = 1.0, max_merge_lane_distance)
+                    # Get potential startset, and update_position()
+                    starts = plan.compute_plan_starts(
+                        self.graph,
+                        self.rmf_map_name,
+                        self.position,
+                        self.adapter.now(),
+                        max_merge_waypoint_distance = 1.0,
+                        max_merge_lane_distance = self.max_merge_lane_distance)
 
-                    ## Get Closest point on graph and update current robot location
-                    closest_wp = self.get_closest_waypoint_idx(
-                        self.position, self.max_merge_lane_distance)
-                    if closest_wp:
-                        self.update_handle.update_off_grid_position(
-                            self.position, closest_wp)
+                    if starts:
+                        self.update_handle.update_position(starts)
                     else:
-                        self.node.get_logger().error(f"Cant find closest waypoint!")
+                        self.node.get_logger().error(f"Cant get startset during perform action")
                         self.update_handle.update_off_grid_position(
                             self.position, self.target_waypoint.graph_index)
 
@@ -583,7 +582,7 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                 self.update_handle.update_off_grid_position(
                     self.position, self.target_waypoint.graph_index)
             else: # if robot is lost
-                # TODO: use get_closest_waypoint_idx()
+                # TODO: use generic update_position() instead
                 print("[update] Calling update_lost_position()")
                 self.update_handle.update_lost_position(
                     self.rmf_map_name, self.position)
@@ -594,34 +593,6 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
 
     def position_str(self):
         return f"{self.position[0]:.2f}, {self.position[1]:.2f}, {self.position[2]:.2f}"
-
-    def get_closest_waypoint_idx(
-            self, position: Tuple[float, float, float],
-            max_merge_lane_distance = 10.0
-        ) -> Optional[int]:
-        """
-        Find closest graph waypoint to the provided position, return waypoint idx
-        """
-        starts = plan.compute_plan_starts(
-            self.graph,
-            self.rmf_map_name,
-            position,
-            self.adapter.now(),
-            max_merge_waypoint_distance = 1.0,
-            max_merge_lane_distance = max_merge_lane_distance)
-        if not starts:
-            return None
-        cx, cy, _ = position
-        closest_idx = -1
-        closest_dist_sq = max_merge_lane_distance**2
-        for s in starts:
-            idx = s.waypoint
-            x, y = self.graph.get_waypoint(idx).location
-            dist_sq = (x-cx)**2 + (y-cy)**2
-            if (dist_sq < closest_dist_sq):
-                closest_idx = idx
-                closest_dist_sq = dist_sq
-        return closest_idx
 
     def get_current_lane(self):
         def projection(current_position,

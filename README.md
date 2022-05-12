@@ -43,6 +43,11 @@ Then run the fleet adapter
 ros2 run fleet_adapter_ecobot fleet_adapter_ecobot -c CONFIG_FILE -n NAV_GRAPH --USE_SIM_TIME
 ```
 
+To run the fleet adapter with `rmf-web`, specify the server_uri:
+```
+ros2 run fleet_adapter_ecobot fleet_adapter_ecobot -c CONFIG_FILE -n NAV_GRAPH --USE_SIM_TIME -s ws://localhost:8000/_internal
+```
+
 Ensure that the `base_url` in the config matches the `LOCALHOST:PORT` specified to the server.
 
 ## Get the Transformation from `traffic-editor`
