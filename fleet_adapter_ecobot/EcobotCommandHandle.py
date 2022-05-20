@@ -114,6 +114,7 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
         self._quit_dock_event = threading.Event()
 
         self.action_execution = None
+        self.stubbornness = None
         self.in_error = False
         self.is_online = False
         self.action_category = None
@@ -478,6 +479,7 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
             self.on_waypoint = None
             self.on_lane = None
             self.action_execution = execution
+            self.stubbornness = self.update_handle.unstable_be_stubborn()
             # robot moves slower during perform action
             self.vehicle_traits.linear.nominal_velocity *= 0.2
 
@@ -516,6 +518,8 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                     else:
                         self.node.get_logger().warn(f"action [{self.action_category}] is killed/canceled")
                     self.api.set_cleaning_mode(self.config['inactive_cleaning_config'])
+                    self.stubbornness.release()
+                    self.stubbornness = None
                     self.action_execution = None
                     self.start_action_time = None
                     self.vehicle_traits.linear.nominal_velocity *= 5 # change back vel
@@ -538,7 +542,7 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                         self.rmf_map_name,
                         self.position,
                         self.adapter.now(),
-                        max_merge_waypoint_distance = 1.0,
+                        max_merge_waypoint_distance = 0.5,
                         max_merge_lane_distance = self.max_merge_lane_distance)
 
                     if starts:
