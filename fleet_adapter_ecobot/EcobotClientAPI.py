@@ -55,7 +55,7 @@ class EcobotAPI:
         if rotate: # The robot will rotate to improve localization
             url = self.prefix + f"/gs-robot/cmd/initialize?map_name={map_name}&init_point_name={init_point}"
         else: # The specified init point must be accurate
-            url = self.prefix + f"/gs-robot/cmd/initialize_directly?map_name={map_name}&init_point_name=?{init_point}"
+            url = self.prefix + f"/gs-robot/cmd/initialize_directly?map_name={map_name}&init_point_name={init_point}"
         try:
             response = requests.get(url, timeout=self.timeout)
             response.raise_for_status()
