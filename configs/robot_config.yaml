@@ -29,8 +29,8 @@ rmf_fleet:
   task_capabilities: # Specify the types of RMF Tasks that robots in this fleet are capable of performing
     loop: True
     delivery: False
-    clean: True
-    finishing_request: "park"
+    clean: False # deprecated, now replace as custom action
+    finishing_request: "nothing"
     action_categories: ["clean", "manual_control"]
 
 # Ecobot CONFIG =================================================================
@@ -39,51 +39,16 @@ robots:
   ecobot40_1:
     ecobot_config:
       base_url: "http://10.7.5.88:8080"
-      user: "some_user" #unused
-      password: "some_password" #unused
       max_delay: 30.0 # allowed seconds of delay of the current itinerary before it gets interrupted and replanned
       filter_waypoints: True
       cleaning_task_prefix: "" # the prefix of the cleaning task created
       active_cleaning_config: "light_cleaning" # the cleaning config used during cleaning
       inactive_cleaning_config: "no_cleaning" # the cleaning config used during navigation
-      # docks: # in rmf coordinates
-      #   vacuum_zone_1: [ [106.3, -20.63, -1.57],
-      #       [106.3, -21.23, 0.0],
-      #       [111.2, -21.15, 1.57],
-      #       [111.1, -17.12, -3.14],
-      #       [106.84, -17.07, -1.57],
-      #       [106.4, -18.98, -1.57]]
-      #   vacuum_zone_2: [ [87.14, -57.59, 0.0],
-      #       [89.66, -57.6, 1.57],
-      #       [89.56, -62.35, 3.14],
-      #       [83.93, -62.35, 3.14],
-      #       [83.93, -59.58, 0.0],
-      #       [87.03, -59.69, 0.0]]
-      #   vacuum_zone_3: [ [26.81, -62.43, -1.57],
-      #       [26.95, -65.09, -3.14],
-      #       [23.57, -65.09, 1.57],
-      #       [23.54, -62.5, 0.0],
-      #       [26.81, -62.43, 0.0]]
-      #   vacuum_zone_4: [ [22.31, -54.06, 3.14],
-      #       [15.3, -53.9, 1.57],
-      #       [15.31, -49.5, 0.0],
-      #       [22.53, -49.56, -1.57],
-      #       [22.5, -52.59, -1.57]]
-      #   vacuum_zone_5: [ [83.0, -33.06, 0.0],
-      #       [81.56, -36.48, -1.57],
-      #       [83.78, -37.62, 0.0],
-      #       [84.91, -34.19, 1.57]]
     rmf_config:
       robot_state_update_frequency: 0.5
       max_merge_lane_distance: 15.0 # means how far will the robot diverge from the defined graph
-      # start:
-      #   map_name: "L1"
-        # waypoint: "charger_ecobot1" # Optional
-        # orientation: 0.0 # Optional, radians
-        # waypoint: null
-        # orientation: null
       charger:
-        waypoint: "charger_ecobot40_1"
+        waypoint: "tinyRobot1_charger"
 
 # TRANSFORM CONFIG =============================================================
 # For computing transforms between Ecobot and RMF coordinate systems
@@ -94,27 +59,18 @@ robots:
 # Format robot_map: {rmf_map_name: rmf_map, reference_coordinates: 
 #                                 {rmf: [[x, y]....], rmf: [[x, y]....]}}
 rmf_transform:
-  L1:
+  mock_test_robot_map:
     rmf_map_name: "L1"
-    reference_coordinates:
-      rmf: [[33.11, -18.99],
-            [111.3, -19.06],
-            [86.16, -19.02],
-            [79.23, -46.94],
-            [82.22, -58.3],
-            [52.65, -58.37],
-            [8.234, -58.35],
-            [9.23, -30.5],
-            [24.68, -19.08] ]
-      robot: [ [3876, 741],
-                [2293, 703],
-                [2816, 710],
-                [2930, 1250],
-                [2861, 1501],
-                [3460, 1524],
-                [4360, 1555],
-                [4347, 991],
-                [4058, 747] ]
-  office_map:
-    rmf_map_name: "L1"
-    transform: [0.556, 0.02, -1.58, 0.05]
+    transform: [1.33, 0.057, -1.598, 0.057] # This is obtained from traffic-editor
+  ## User can also provide a pair of "reference_coordinates"
+  # mock_test_robot_map2:
+  #   rmf_map_name: "L1"
+  #   reference_coordinates:
+  #     rmf: [[33.11, -18.99],
+  #           [111.3, -19.06],
+  #           [86.16, -19.02],
+  #           [24.68, -19.08] ]
+  #     robot: [ [3876, 741],
+  #               [2293, 703],
+  #               [2816, 710],
+  #               [4058, 747] ]

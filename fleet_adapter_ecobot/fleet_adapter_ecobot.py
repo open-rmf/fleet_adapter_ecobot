@@ -30,10 +30,6 @@ import rmf_adapter.geometry as geometry
 import rmf_adapter.graph as graph
 import rmf_adapter.plan as plan
 
-from rmf_task_msgs.msg import TaskProfile, TaskType
-
-from functools import partial
-
 from .EcobotCommandHandle import EcobotCommandHandle
 from .EcobotClientAPI import EcobotAPI
 from .utils import RmfMapTransform
@@ -115,30 +111,19 @@ def initialize_fleet(config_yaml, nav_graph_path, node, server_uri, args):
         finishing_request)
     assert ok, ("Unable to set task planner params")
 
-    task_capabilities = []
+    # Accept Standard RMF Task which are defined in config.yaml
+    always_accept = adpt.fleet_update_handle.Confirmation()
+    always_accept.accept()
     if task_capabilities_config['loop']:
         node.get_logger().info(
             f"Fleet [{fleet_name}] is configured to perform Loop tasks")
-        task_capabilities.append(TaskType.TYPE_LOOP)
+        fleet_handle.consider_patrol_requests(lambda desc: always_accept)
     if task_capabilities_config['delivery']:
         node.get_logger().info(
             f"Fleet [{fleet_name}] is configured to perform Delivery tasks")
-        task_capabilities.append(TaskType.TYPE_DELIVERY)
-    if task_capabilities_config['clean']:
-        node.get_logger().info(
-            f"Fleet [{fleet_name}] is configured to perform Clean tasks")
-        task_capabilities.append(TaskType.TYPE_CLEAN)
+        fleet_handle.consider_delivery_requests(lambda desc: always_accept)
 
-    # Callable for validating requests that this fleet can accommodate
-    def _task_request_check(task_capabilities, msg: TaskProfile):
-        if msg.description.task_type in task_capabilities:
-            return True
-        else:
-            return False
-
-    fleet_handle.accept_task_requests(
-        partial(_task_request_check, task_capabilities))
-
+    # Whether to accept Custom RMF Action Task
     def _consider(description: dict):
         confirm = adpt.fleet_update_handle.Confirmation()
 
@@ -163,10 +148,6 @@ def initialize_fleet(config_yaml, nav_graph_path, node, server_uri, args):
                 f" to perform action of category [{cat}]")
             fleet_handle.add_performable_action(cat, _consider)
 
-    def updater_inserter(cmd_handle, update_handle):
-        """Insert a RobotUpdateHandle."""
-        cmd_handle.init_handler(update_handle)
-
     # Initialize robots for this fleet
     missing_robots = config_yaml['robots']
 
@@ -178,13 +159,16 @@ def initialize_fleet(config_yaml, nav_graph_path, node, server_uri, args):
                 node.get_logger().debug(f"Connecting to robot: {robot_name}")
                 robot_config = missing_robots[robot_name]['ecobot_config']
 
-                if args.test_client_api:
+                # Switch between using Robot's API or Testing API
+                if args.test_api_config_file != "":
                     from .TestClientAPI import ClientAPI
-                    api = ClientAPI()
+                    node.get_logger().warn(
+                        f"Testing fleet adapter with test api: {args.test_api_config_file}")
+                    api = ClientAPI(args.test_api_config_file)
                 else:
                     api = EcobotAPI(robot_config['base_url'], robot_config['cleaning_task_prefix'])
 
-                if not api.connected:
+                if not api.online():
                     continue
 
                 robot_map_name = api.current_map()
@@ -272,13 +256,15 @@ def initialize_fleet(config_yaml, nav_graph_path, node, server_uri, args):
                     max_merge_lane_distance=rmf_config["max_merge_lane_distance"])
 
                 robots[robot_name] = robot
+
                 # Add robot to fleet
-                fleet_handle.add_robot(robot,
-                                        robot_name,
-                                        profile,
-                                        starts,
-                                        partial(updater_inserter,
-                                                robot))
+                fleet_handle.add_robot(
+                    robot,
+                    robot_name,
+                    profile,
+                    starts,
+                    lambda update_handle: robot.init_handler(update_handle))
+
                 node.get_logger().info(
                     f"Successfully added new robot: {robot_name}")
                 del missing_robots[robot_name]
@@ -303,15 +289,15 @@ def main(argv=sys.argv):
         prog="fleet_adapter_ecobot",
         description="Configure and spin up fleet adapter for Gaussian Ecobot robots ")
     parser.add_argument("-c", "--config_file", type=str, required=True,
-                        help="Path to the config.yaml file for this fleet adapter")
+        help="Path to the config.yaml file for this fleet adapter")
     parser.add_argument("-n", "--nav_graph", type=str, required=True,
-                    help="Path to the nav_graph for this fleet adapter")
+        help="Path to the nav_graph for this fleet adapter")
     parser.add_argument("-s", "--server_uri", type=str, required=False, default="",
-                    help="URI of the api server to transmit state and task information.")
+        help="URI of the api server to transmit state and task information.")
     parser.add_argument("--use_sim_time", action="store_true",
-                    help='Use sim time for testing offline, default: false')
-    parser.add_argument("--test_client_api", action="store_true",
-                    help='Use Test Client api to test instead of ecobot api')
+        help='Use sim time for testing offline, default: false')
+    parser.add_argument("-tf", "--test_api_config_file", type=str, required=False, default="",
+        help='supply a test_client_api config file to test ecobot client api as sim')
     args = parser.parse_args(args_without_ros[1:])
     print(f"Starting ecobot fleet adapter...")
 

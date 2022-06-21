@@ -1,0 +1,22 @@
+# note that yaw (x, y, yaw) from gaussian api is in degree, not radian
+# mock_dock_path is empty since dock_name/dock() is not used in this scenario
+
+mock_clean_path: [
+    [57.06, 141.63, 0],
+    [70.43, 132.84, 0],
+    [84.60, 139.63, 45],
+    [108.08, 163.16, 90],
+    [112.99, 195.95, 90],
+    [114.13, 221.31, 90],
+    [114.09, 256.41, 90],
+    [111.45, 308.84, 180],
+    [61.71, 307.48, 180],
+    [54.43, 260.89, -90],
+    [59.49, 220.74, -90],
+    [64.15, 172.95, -90],
+    [49.28, 158.20, -90],
+]
+mock_dock_path: []
+dock_position: [85.28, 338.95, 0] # charging point
+mock_location: [50.89, 325.29, 0] # this indicate where the robot will start
+mock_robot_map_name: "mock_test_robot_map"

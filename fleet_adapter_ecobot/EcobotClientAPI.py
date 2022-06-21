@@ -26,7 +26,6 @@ class EcobotAPI:
         self.cleaning_task_prefix = cleaning_task_prefix
         self.debug = debug
         self.timeout = timeout
-        self.connected = False
         # Test connectivity
         data = self.data()
         if data is not None:
@@ -34,6 +33,10 @@ class EcobotAPI:
             self.connected = True
         else:
             print("[EcobotAPI] unable to query API server")
+            self.connected = False
+
+    def online(self):
+        return self.connected
 
     def load_map(self, map_name: str):
         url = self.prefix + f"/gs-robot/cmd/load_map?map_name={map_name}"
@@ -109,6 +112,7 @@ class EcobotAPI:
             return response.json()['successed']
         except HTTPError as http_err:
             print(f"HTTP error: {http_err}")
+            self.connected = False
         except Exception as err:
             print(f"Other error: {err}")
         return False
