@@ -22,11 +22,6 @@ Ensure the robot can be pinged.
 ros2 run fleet_adapter_ecobot fleet_adapter_ecobot -c CONFIG_FILE -n NAV_GRAPH
 ```
 
-Dispatch a Task
-```
-ros2 run rmf_demos_tasks dispatch_action -s lounge -a clean -ad '{ "clean_task_name": "clean_lounge" }'
-```
-
 To run the fleet adapter with [rmf-web](https://github.com/open-rmf/rmf-web/), specify the server_uri (`-s`):
 ```bash
 ros2 run fleet_adapter_ecobot fleet_adapter_ecobot -c CONFIG_FILE -n NAV_GRAPH -s ws://localhost:8000/_internal
@@ -53,21 +48,24 @@ ros2 run fleet_adapter_ecobot fleet_adapter_ecobot \
 Different to the simulation running on gazebo, this `TestClientAPI` mocks the behavior of the fleet adapter when receives command from RMF. Thus, the script is running on actual system wall time.
 
 ### Patrol Task
+
 Now try to command robot to move to `Pantry`
 ```bash
 ros2 run rmf_demos_tasks dispatch_patrol -p pantry
 ```
 
 ### Custom Clean Task
+
 Send the robot to clean an area. This custom clean task is created by composing `go_to_place` and custom `perform_action`.
 ```bash
 ros2 run rmf_demos_tasks dispatch_action -s patrol_D2 -a clean -ad '{ "clean_task_name": "clean_hallway" }'
 ```
 
-### Docking
-Add a `dock_name` on a charger waypoint in traffic editor. This will then call the `dock()` function when the robot is approaching the charger.
+### Docking to Charger
 
-## Get the Transformation from `traffic-editor`
+Add a `dock_name` on a charger waypoint in traffic editor. This will then call the `dock()` function when the robot is approaching the charger. Note that this is not demonstrated in this demo.
+
+## Get the Ecobot to RMF map Transformation with `traffic-editor`
 
 To get the transformation of the robot map to rmf map, user can add a "floorplan" of a robot map. Then annotate and the corresponding "constraint-pairs", lastly `ctrl-T` to let traffic-editor calculate the respective transformation.
 
@@ -84,4 +82,6 @@ ros2 launch rmf_demos office.launch.xml run_fleet_adapters:=0
 ros2 run fleet_adapter_ecobot clicked_point_transform -tf 1.33 0.057 -1.598 0.057
 ```
 
-Subsequently, select "publish point" on rviz, then click on the respective point on the map. Immediately, the point in rmf and robot coordinate will get published on `clicked_point_transform` terminal. These coordinates are helpful during debugging.
+![](../media/media/rviz2_publish_point.png)
+
+Subsequently, select "publish point" on rviz, then click on the respective point on the map. Immediately, the point in rmf and robot coordinate will get printed on `clicked_point_transform` terminal. These coordinates are helpful during debugging.
