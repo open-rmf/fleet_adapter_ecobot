@@ -9,6 +9,7 @@ For more information on the APIs, please reference [this document](http://downlo
 
 ## Requirements
 * [Open-RMF](https://github.com/open-rmf/rmf)
+* nudged: `pip3 install nudged`
 
 ## Setup
 * Clone this repository into a workspace
@@ -30,6 +31,8 @@ ros2 run fleet_adapter_ecobot fleet_adapter_ecobot -c CONFIG_FILE -n NAV_GRAPH -
 ## Test the fleet adapter in "Mock Mode"
 The adapter can be tested in mock mode with the help of the [TestClientAPI](fleet_adapter_ecobot/TestClientAPI.py). This class emulates the member functions of `EcobotClientAPI.py` which calls the rest apis of the robot. This "mock mode" is enabled by providing `-tf` argument.
 
+![](../media/media/office-world-rviz.png)
+
 Run this example in office world:
 ```bash
 ros2 launch rmf_demos office.launch.xml run_fleet_adapters:=0
@@ -37,7 +40,7 @@ ros2 launch rmf_demos office.launch.xml run_fleet_adapters:=0
 
 Then run the ecobot fleet adapter
 ```bash
-# Note the addition of "--test_client_api" and "-tf"
+# Note the addition of "--test_api_config_file" and "-tf"
 ros2 run fleet_adapter_ecobot fleet_adapter_ecobot \
     -c src/fleet_adapter_ecobot/configs/robot_config.yaml \
     -n install/rmf_demos_maps/share/rmf_demos_maps/maps/office/nav_graphs/0.yaml \
@@ -61,6 +64,12 @@ Send the robot to clean an area. This custom clean task is created by composing 
 ros2 run rmf_demos_tasks dispatch_action -s patrol_D2 -a clean -ad '{ "clean_task_name": "clean_hallway" }'
 ```
 
+### Show overlayed ecobot map
+Show overlayed lidar map on rviz2 office map
+```bash
+ros2 launch rmf_demos map_server.launch.py map_name:=ecobot_office tx:=1.33 ty:=0.057 yaw:=-1.598
+```
+
 ### Docking to Charger
 
 Add a `dock_name` on a charger waypoint in traffic editor. This will then call the `dock()` function when the robot is approaching the charger. Note that this is not demonstrated in this demo.
@@ -79,7 +88,7 @@ Then if you wish to configure your custom waypoints in the `configs/test_api_con
 # first run the office map
 ros2 launch rmf_demos office.launch.xml run_fleet_adapters:=0
 # then run this on a seperate terminal
-ros2 run fleet_adapter_ecobot clicked_point_transform -tf 1.33 0.057 -1.598 0.057
+ros2 run fleet_adapter_ecobot clicked_point_transform -tf 1.33 0.057 -1.598 0.049
 ```
 
 ![](../media/media/rviz2_publish_point.png)

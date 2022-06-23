@@ -142,12 +142,8 @@ class EcobotAPI:
         return False
 
 
-    def start_clean(self, name:str, map_name:str):
-        ''' Returns True if the robot has started the cleaning process, else False'''
-        return self.start_task(name, map_name)
-
-
     def start_task(self, name:str, map_name:str):
+        ''' Returns True if the robot has started a task/cleaning process, else False'''
         # we first get the relevant task queue and then start a new task
         data = {}
         response = self.task_queues(map_name)

@@ -61,7 +61,7 @@ robots:
 rmf_transform:
   mock_test_robot_map:
     rmf_map_name: "L1"
-    transform: [1.33, 0.057, -1.598, 0.057] # This is obtained from traffic-editor
+    transform: [1.33, 0.057, -1.598, 0.049] # This is obtained from traffic-editor
   ## User can also provide a pair of "reference_coordinates"
   # mock_test_robot_map2:
   #   rmf_map_name: "L1"

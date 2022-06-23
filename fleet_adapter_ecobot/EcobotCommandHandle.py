@@ -449,7 +449,7 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                 while True:
                     self.node.get_logger().info(
                         f"Requesting robot {self.name} to clean {description}")
-                    if self.api.start_clean(description["clean_task_name"], self.robot_map_name):
+                    if self.api.start_task(description["clean_task_name"], self.robot_map_name):
                         self.check_task_completion = self.api.task_completed # check api func
                         break
                     if (attempts > 3):

@@ -70,13 +70,8 @@ class ClientAPI:
     def start_task(self, name:str, map_name:str):
         ''' Returns True if the robot has started the generic task, else False'''
         print(f"[TEST CLIENT API] Start mock task : {name}")
-        self.is_mock_docking = True
-        return True
-
-    def start_clean(self, name:str, map_name:str):
-        ''' Returns True if the robot has started the cleaning process, else False'''
-        print(f"[TEST CLIENT API] Set mock start CLEANING : {name}")
-        self.is_mock_cleaning = True
+        if not self.is_mock_docking:
+            self.is_mock_cleaning = True
         return True
 
     def pause(self):
