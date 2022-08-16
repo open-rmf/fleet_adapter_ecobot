@@ -117,6 +117,25 @@ class EcobotAPI:
             print(f"Other error: {err}")
         return False
 
+    # NOTE: Unstable gaussian api 2.0. Get task status
+    def __navigate(self, pose):
+        assert(len(pose) > 2)
+        url = self.prefix + f"/gs-robot/cmd/quick/navigate?type=2"
+        data = {}
+        data["destination"] = {"gridPosition": {"x": pose[0], "y": pose[1]}, "angle": pose[2]}
+        try:
+            response = requests.post(url, timeout=self.timeout, json=data)
+            response.raise_for_status()
+            if self.debug:
+                print(f"Response: {response.json()}")
+            return response.json()['successed']
+        except HTTPError as http_err:
+            print(f"HTTP error: {http_err}")
+            self.connected = False
+        except Exception as err:
+            print(f"Other error: {err}")
+        return False
+
 
     def navigate_to_waypoint(self, waypoint_name, map_name):
         ''' Ask the robot to navigate to a preconfigured waypoint on a map.
@@ -131,6 +150,23 @@ class EcobotAPI:
         data["tasks"] = [task]
         try:
             response = requests.post(url, timeout=self.timeout, json=data)
+            response.raise_for_status()
+            if self.debug:
+                print(f"Response: {response.json()}")
+            return response.json()['successed']
+        except HTTPError as http_err:
+            print(f"HTTP error: {http_err}")
+        except Exception as err:
+            print(f"Other error: {err}")
+        return False
+
+    # NOTE: Unstable gaussian api 2.0
+    def __navigate_to_waypoint(self, waypoint_name, map_name):
+        ''' Ask the robot to navigate to a preconfigured waypoint on a map.
+            Returns True if the robot received the command'''
+        url = self.prefix + f"/gs-robot/cmd/start_cross_task?map_name={map_name}&position_name={waypoint_name}"
+        try:
+            response = requests.get(url, timeout=self.timeout)
             response.raise_for_status()
             if self.debug:
                 print(f"Response: {response.json()}")
@@ -233,6 +269,22 @@ class EcobotAPI:
             print(f"Other error: {err}")
         return None
 
+    #NOTE: Unstable gaussian api 2.0. Get task status
+    def __state(self):
+        url = self.prefix + f"/gs-robot/real_time_data/robot_status"
+        try:
+            response = requests.get(url, timeout=self.timeout)
+            response.raise_for_status()
+            if self.debug:
+                # print(f"Response: \n {response.json()}")
+                data = response.json()["data"]["statusData"]
+                print(json.dumps(data, indent=2))
+            return data
+        except HTTPError as http_err:
+            print(f"HTTP error: {http_err}")
+        except Exception as err:
+            print(f"Other error: {err}")
+        return None
 
     def data(self):
         url = self.prefix + f"/gs-robot/data/device_status"

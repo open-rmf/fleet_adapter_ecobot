@@ -408,8 +408,10 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
             self.node.get_logger().error(
                 f"Robot map name [{map_name}] is not known. return last known position.")
             self.is_online = True
+            self.in_error = True
             return self.position
 
+        self.in_error = False
         tf = self.transforms[map_name]
         x,y,theta = tf['tf'].to_rmf_map([position[0],position[1], math.radians(position[2])])
         print(f"Convert pos from {position} grid coor to {x},{y}, {theta} rmf coor")
@@ -453,10 +455,9 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                         self.check_task_completion = self.api.task_completed # check api func
                         break
                     if (attempts > 3):
-                        self.node.get_logger().warn(
+                        self.node.get_logger().error(
                             f"Failed to initiate cleaning action for robot [{self.name}]")
-                        # TODO: issue error ticket
-                        self.in_error = True # TODO: toggle error back
+                        # TODO: kill_task() or fail the task (api is not avail in adapter)
                         execution.error("Failed to initiate cleaning action for robot {self.name}")
                         execution.finished()
                         return
@@ -481,6 +482,7 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
         if self.api.is_charging():
             self.update_handle.override_status("charging")
         elif not self.is_online:
+            self.node.get_logger().warn(f"Robot {self.name} is offline")
             self.update_handle.override_status("offline")
         elif self.in_error:
             self.update_handle.override_status("error")
@@ -558,13 +560,17 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
         self.battery_soc = self.get_battery_soc()
         self.update_handle.update_battery_soc(self.battery_soc)
 
+        ## TODO: there's a tendency that the robot stop updating the system when it is offline, why!!!
+        ## TODO: clean up complex lock and multi threaded system
+        ## TODO: make it single threaded, and only use api.update_position()
+        ## TODO: check if waypoint is close enough, and mark navigation ask as completed.
         # Update states and positions
         with self._lock:
             if (self.action_execution):
                 self.check_perform_action()
             elif (self.on_waypoint is not None): # if robot is on a waypoint
                 print(f"[update] Calling update_current_waypoint() on waypoint with " \
-                      f"pose[{self.position_str()}] and waypoint[{self.on_waypoint}]")
+                        f"pose[{self.position_str()}] and waypoint[{self.on_waypoint}]")
                 self.update_handle.update_current_waypoint(
                     self.on_waypoint, self.position[2])
             elif (self.on_lane is not None): # if robot is on a lane
@@ -580,13 +586,13 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                 if reverse_lane is not None: # Unidirectional graph
                     lane_indices.append(reverse_lane.index)
                 print(f"[update] Calling update_current_lanes() with pose[{self.position_str()}] "\
-                      f"and lanes:{lane_indices}")
+                        f"and lanes:{lane_indices}")
                 self.update_handle.update_current_lanes(
                     self.position, lane_indices)
             # if robot is merging into a waypoint
             elif (self.target_waypoint is not None and self.target_waypoint.graph_index is not None):
                 print(f"[update] Calling update_off_grid_position() with pose " \
-                      f"[{self.position_str()}] and waypoint[{self.target_waypoint.graph_index}]")
+                        f"[{self.position_str()}] and waypoint[{self.target_waypoint.graph_index}]")
                 self.update_handle.update_off_grid_position(
                     self.position, self.target_waypoint.graph_index)
             else: # if unsure which waypoint the robot is near to
@@ -597,7 +603,7 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
                 else:
                     print("[update] Calling update_lost_position()")
                     self.update_handle.update_lost_position(
-                        self.rmf_map_name, self.position)
+                            self.rmf_map_name, self.position)
 
     ########################################################################
     ## Utils
