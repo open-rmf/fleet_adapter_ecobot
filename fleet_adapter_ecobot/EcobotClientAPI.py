@@ -53,7 +53,6 @@ class EcobotAPI:
             print(f"Other error: {err}")
         return False
 
-
     def localize(self, init_point:str, map_name:str, rotate=False):
         if rotate: # The robot will rotate to improve localization
             url = self.prefix + f"/gs-robot/cmd/initialize?map_name={map_name}&init_point_name={init_point}"
@@ -70,7 +69,6 @@ class EcobotAPI:
         except Exception as err:
             print(f"Other error: {err}")
         return False
-
 
     def position(self):
         ''' Returns [x, y, theta] expressed in the robot's coordinate frame or None'''
@@ -198,7 +196,7 @@ class EcobotAPI:
         print(f"Data: {data}")
         url = self.prefix + "/gs-robot/cmd/start_task_queue"
         try:
-            response = requests.post(url, timeout=self.timeout, json=data)
+            response = requests.post(url, timeout=15, json=data)
             response.raise_for_status()
             if self.debug:
                 print(f"Response: {response.json()}")
@@ -209,6 +207,22 @@ class EcobotAPI:
             print(f"Other error: {err}")
         return False
 
+    def get_task_queue(self, name:str, map_name:str):
+        ''' Returns True if the robot has started a task/cleaning process, else False'''
+        # we first get the relevant task queue and then start a new task
+        data = {}
+        response = self.task_queues(map_name)
+        if response is None:
+            return False
+        response_data = response["data"]
+        # if self.debug:
+        #     print(f"Response data:{response_data}")
+        for _data in response_data:
+            if _data["name"] == self.cleaning_task_prefix + name:
+                data = _data
+                print(f"Data found for task!")
+                break
+        print(f"Data: {data}")
 
     def pause(self):
         url = self.prefix + f"/gs-robot/cmd/pause_task_queue"
