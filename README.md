@@ -5,7 +5,9 @@
 This repository contains an RMF fleet adapter developed for [Gaussian Ecobot](https://www.gaussianrobotics.com/) cleaning robots.
 It has been tested on S40, S50 and S75 variants of robots.
 The adapter communicates with the robots via REST API calls.
-For more information on the APIs, please reference [this document](http://download.gs-robot.com/gs_api/api.html#1)
+For more information on the APIs, please reference [API 2.0 document](http://download.gs-robot.com/gs_api/api.html#1). 
+
+> Note: The latest Gaussian API is at 3.0. Please refer to the relevant document for the latest endpoints.
 
 ## Requirements
 * [Open-RMF](https://github.com/open-rmf/rmf)
@@ -94,3 +96,8 @@ ros2 run fleet_adapter_ecobot clicked_point_transform -tf 1.33 0.057 -1.598 0.04
 ![](../media/media/rviz2_publish_point.png)
 
 Subsequently, select "publish point" on rviz, then click on the respective point on the map. Immediately, the point in rmf and robot coordinate will get printed on `clicked_point_transform` terminal. These coordinates are helpful during debugging.
+
+# TODO 
+- Traffic editior
+  - Add portion explaining the need to specify the 'dock_name' of the charging point in traffic editor to match the name of the charging point stored within the robot's internal database.
+- Update test scripts for new API
