@@ -262,7 +262,7 @@ class EcobotAPI:
         if self.api_at_least("3.6.6"):
             url = self.prefix + f"/gs-robot/cmd/stop_cross_task"
 
-            success = self.get_request(url)['data']
+            success = self.get_request(url)['successed']
         else:
             url = self.prefix + f"/gs-robot/cmd/stop_task_queue"
             
