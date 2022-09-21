@@ -204,25 +204,35 @@ class EcobotAPI:
         :returns: True if robot has started a task/cleaning process, else False
         :rtype: bool
         """
-        # we first get the relevant task queue and then start a new task
-        task_data = {}
+        task_exists = False
+
+        data = {}
+        data["loop"] = False
+        data["loop_count"] = 0
+        data["name"] = name
+        data["map_name"] = map_name # this is the name of the map as stored on the robot
+        data["tasks"] = []
+
         response = self.task_queues(map_name)
         if response is None:
             return False
 
-        available_tasks = response["data"]
+        # we first get the relevant task queue and then start a new task
         if self.debug:
-            print(f"Response from querying task queues: \n{available_tasks}")
-        for task in available_tasks:
+            print(f"Response from querying task queues: \n{response['data']}")
+        for task in response["data"]:
             if task["name"] == self.cleaning_task_prefix + name:
-                task_data = task
+                print(f"Task Data: {data}")
                 print(f"Data found for task!")
+                task_exists = True
                 break
-        print(f"Task Data: {task_data}")
+
+        if not task_exists:
+            return False 
 
         url = self.prefix + "/gs-robot/cmd/start_task_queue"
 
-        success = self.post_request(url, task_data)['successed']
+        success = self.post_request(url, data)['successed']
         if success is None:
             return False
         return success
