@@ -354,16 +354,24 @@ class EcobotAPI:
         # TODO Check if this only checks navigation tasks or also cleaning tasks
         # If it is only used to check navigation tasks, then we might need to update 
         # navigation_completed and task_completed methods to use different endpoints for checking
-        if self.api_at_least("3.6.6"):
-            url = self.prefix + f"/gs-robot/cmd/is_cross_task_finished"
 
-            success = self.get_request(url)['data']
-        else:
+        # TODO The new API seems to be unstable, it returns true for tasks that still being executed,
+        # resulting in premature completion of cleaning tasks.
+        
+        # if self.api_at_least("3.6.6"):
+        #     url = self.prefix + f"/gs-robot/cmd/is_cross_task_finished"
+
+        #     success = self.get_request(url)['data']
+        # else:
             # the task is completed when response["data"] is True
-            url = self.prefix + f"/gs-robot/cmd/is_task_queue_finished"
+            # url = self.prefix + f"/gs-robot/cmd/is_task_queue_finished"
 
-            success = self.get_request(url)['data']
+            # success = self.get_request(url)['data']
             
+        url = self.prefix + f"/gs-robot/cmd/is_task_queue_finished"
+
+        success = self.get_request(url)['data']
+
         if success is None:
             return False
         return success
