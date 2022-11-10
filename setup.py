@@ -23,6 +23,7 @@ setup(
             'fleet_adapter_ecobot=fleet_adapter_ecobot.fleet_adapter_ecobot:main',
             'clicked_point_transform=fleet_adapter_ecobot.clicked_point_transform:main',
             'ecobot_sim_server=fleet_adapter_ecobot.ecobot_sim_server:main',
+            'test_ecobot_client_methods=fleet_adapter_ecobot.test_ecobot_client_methods:main',
         ],
     },
 )
