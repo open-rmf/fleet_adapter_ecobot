@@ -93,7 +93,7 @@ class EcobotAPI:
         """
         url = self.prefix + f"/gs-robot/cmd/load_map?map_name={map_name}"
 
-        success = self.get_request(url)["successed"]
+        success = self.get_request(url).get('successed')
 
         if success is None:
             return False
@@ -122,7 +122,7 @@ class EcobotAPI:
         else: # The specified init point must be accurate
             url = self.prefix + f"/gs-robot/cmd/initialize_directly?map_name={map_name}&init_point_name={init_point}"
 
-        success = self.get_request(url)["successed"]
+        success = self.get_request(url).get('successed')
         if success is None:
             return False
         return success
@@ -178,7 +178,7 @@ class EcobotAPI:
                 "angle": pose[2]
             }
 
-            success = self.post_request(url, data)['successed']
+            success = self.post_request(url, data).get('successed')
         else:
             url = self.prefix + r"/gs-robot/cmd/start_task_queue"
             data = {}
@@ -200,7 +200,7 @@ class EcobotAPI:
             }
             data["tasks"] = [task]
 
-            success = self.post_request(url, data)['successed']
+            success = self.post_request(url, data).get('successed')
 
         if success is None:
             return False
@@ -226,7 +226,7 @@ class EcobotAPI:
         if self.api_at_least("3.6.6"):
             url = self.prefix + f"/gs-robot/cmd/start_cross_task?map_name={map_name}&position_name={waypoint_name}"
 
-            success = self.get_request(url)["successed"]
+            success = self.get_request(url).get('successed')
         else:
             url = self.prefix + r"/gs-robot/cmd/start_task_queue"
             data = {}
@@ -242,7 +242,7 @@ class EcobotAPI:
                     }
             data["tasks"] = [task]
 
-            success = self.post_request(url, data)['successed']
+            success = self.post_request(url, data).get('successed')
 
         if success is None:
             return False
@@ -292,7 +292,7 @@ class EcobotAPI:
 
         url = self.prefix + "/gs-robot/cmd/start_task_queue"
 
-        success = self.post_request(url, data)['successed']
+        success = self.post_request(url, data).get('successed')
         if success is None:
             return False
         return success
@@ -308,7 +308,7 @@ class EcobotAPI:
 
         url = self.prefix + r"/gs-robot/cmd/pause_task_queue"
 
-        success = self.get_request(url)["successed"]
+        success = self.get_request(url).get('successed')
         if success is None:
             return False
         return success
@@ -324,7 +324,7 @@ class EcobotAPI:
 
         url = self.prefix + r"/gs-robot/cmd/resume_task_queue"
 
-        success = self.get_request(url)['successed']
+        success = self.get_request(url).get('successed')
         if success is None:
             return False
         return success
@@ -342,11 +342,11 @@ class EcobotAPI:
         if self.api_at_least("3.6.6"):
             url = self.prefix + r"/gs-robot/cmd/stop_cross_task"
 
-            success = self.get_request(url)['successed']
+            success = self.get_request(url).get('successed')
         else:
             url = self.prefix + r"/gs-robot/cmd/stop_task_queue"
 
-            success = self.get_request(url)['successed']
+            success = self.get_request(url).get('successed')
 
         if success is None:
             return False
@@ -363,9 +363,13 @@ class EcobotAPI:
 
         url = self.prefix + r"/gs-robot/real_time_data/robot_status"
 
-        current_map_name = self.get_request(url)["data"]["robotStatus"]["map"]["name"]
+        robot_status = self.get_request(url).get('data', {}).get('robotStatus')
 
-        return current_map_name
+        if robot_status is not None:
+            current_map_name = robot_status.get('map', {}).get('name')
+            return current_map_name
+
+        return None
 
     #NOTE: Unstable gaussian api 2.0. Get task status
     def __state(self):
@@ -378,7 +382,7 @@ class EcobotAPI:
         """
         url = self.prefix + r"/gs-robot/real_time_data/robot_status"
 
-        robot_state = self.get_request(url)["data"]["statusData"]
+        robot_state = self.get_request(url).get('data',{}).get('statusData')
 
         return robot_state
 
@@ -467,7 +471,7 @@ class EcobotAPI:
             
         url = self.prefix + r"/gs-robot/cmd/is_task_queue_finished"
 
-        success = self.get_request(url)['data']
+        success = self.get_request(url).get('data')
 
         if success is None:
             return False
@@ -529,7 +533,7 @@ class EcobotAPI:
         """
         url = self.prefix + f"/gs-robot/cmd/set_cleaning_mode?cleaning_mode={cleaning_config}"
 
-        success = self.get_request(url)['successed']
+        success = self.get_request(url).get('successed')
         if success is None:
             return False
         return success
@@ -578,9 +582,11 @@ class EcobotAPI:
 
         """
         url = self.prefix + r"/gs-robot/info"
-        api_version = self.get_request(url)["data"]["version"].split("_")[1][1:]
-        api_version = api_version.replace("-", ".")
-        return api_version
+        api_version_raw = self.get_request(url).get('data', {}).get('version')
+        if api_version_raw is not None:
+            api_version = api_version_raw.split("_")[1][1:].replace("-", ".")
+            return api_version
+        return None
 
     def api_at_least(self, min_sem_version: str):
         """Check if the current robot's API version is at least 'min_sem_version'.
