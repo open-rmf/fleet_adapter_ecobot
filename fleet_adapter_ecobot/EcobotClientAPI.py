@@ -26,7 +26,6 @@ class EcobotAPI:
         self.cleaning_task_prefix = cleaning_task_prefix
         self.debug = debug
         self.timeout = timeout
-        self.connected = False
         # Test connectivity
         data = self.data()
         if data is not None:
@@ -34,6 +33,10 @@ class EcobotAPI:
             self.connected = True
         else:
             print("[EcobotAPI] unable to query API server")
+            self.connected = False
+
+    def online(self):
+        return self.connected
 
     def load_map(self, map_name: str):
         url = self.prefix + f"/gs-robot/cmd/load_map?map_name={map_name}"
@@ -55,7 +58,7 @@ class EcobotAPI:
         if rotate: # The robot will rotate to improve localization
             url = self.prefix + f"/gs-robot/cmd/initialize?map_name={map_name}&init_point_name={init_point}"
         else: # The specified init point must be accurate
-            url = self.prefix + f"/gs-robot/cmd/initialize_directly?map_name={map_name}&init_point_name=?{init_point}"
+            url = self.prefix + f"/gs-robot/cmd/initialize_directly?map_name={map_name}&init_point_name={init_point}"
         try:
             response = requests.get(url, timeout=self.timeout)
             response.raise_for_status()
@@ -109,6 +112,26 @@ class EcobotAPI:
             return response.json()['successed']
         except HTTPError as http_err:
             print(f"HTTP error: {http_err}")
+            self.connected = False
+        except Exception as err:
+            print(f"Other error: {err}")
+        return False
+
+    # NOTE: Unstable gaussian api 2.0. Get task status
+    def __navigate(self, pose):
+        assert(len(pose) > 2)
+        url = self.prefix + f"/gs-robot/cmd/quick/navigate?type=2"
+        data = {}
+        data["destination"] = {"gridPosition": {"x": pose[0], "y": pose[1]}, "angle": pose[2]}
+        try:
+            response = requests.post(url, timeout=self.timeout, json=data)
+            response.raise_for_status()
+            if self.debug:
+                print(f"Response: {response.json()}")
+            return response.json()['successed']
+        except HTTPError as http_err:
+            print(f"HTTP error: {http_err}")
+            self.connected = False
         except Exception as err:
             print(f"Other error: {err}")
         return False
@@ -137,9 +160,26 @@ class EcobotAPI:
             print(f"Other error: {err}")
         return False
 
+    # NOTE: Unstable gaussian api 2.0
+    def __navigate_to_waypoint(self, waypoint_name, map_name):
+        ''' Ask the robot to navigate to a preconfigured waypoint on a map.
+            Returns True if the robot received the command'''
+        url = self.prefix + f"/gs-robot/cmd/start_cross_task?map_name={map_name}&position_name={waypoint_name}"
+        try:
+            response = requests.get(url, timeout=self.timeout)
+            response.raise_for_status()
+            if self.debug:
+                print(f"Response: {response.json()}")
+            return response.json()['successed']
+        except HTTPError as http_err:
+            print(f"HTTP error: {http_err}")
+        except Exception as err:
+            print(f"Other error: {err}")
+        return False
 
-    def start_clean(self, name:str, map_name:str):
-        ''' Returns True if the robot has started the cleaning process, else False'''
+
+    def start_task(self, name:str, map_name:str):
+        ''' Returns True if the robot has started a task/cleaning process, else False'''
         # we first get the relevant task queue and then start a new task
         data = {}
         response = self.task_queues(map_name)
@@ -213,6 +253,39 @@ class EcobotAPI:
             print(f"Other error: {err}")
         return False
 
+    def current_map(self):
+        url = self.prefix + f"/gs-robot/real_time_data/robot_status"
+        try:
+            response = requests.get(url, timeout=self.timeout)
+            response.raise_for_status()
+            if self.debug:
+                # print(f"Response: \n {response.json()}")
+                print(json.dumps(response.json(), indent=2))
+
+            return response.json()["data"]["robotStatus"]["map"]["name"]
+        except HTTPError as http_err:
+            print(f"HTTP error: {http_err}")
+        except Exception as err:
+            print(f"Other error: {err}")
+        return None
+
+    #NOTE: Unstable gaussian api 2.0. Get task status
+    def __state(self):
+        url = self.prefix + f"/gs-robot/real_time_data/robot_status"
+        try:
+            response = requests.get(url, timeout=self.timeout)
+            response.raise_for_status()
+            if self.debug:
+                # print(f"Response: \n {response.json()}")
+                data = response.json()["data"]["statusData"]
+                print(json.dumps(data, indent=2))
+            return data
+        except HTTPError as http_err:
+            print(f"HTTP error: {http_err}")
+        except Exception as err:
+            print(f"Other error: {err}")
+        return None
+
     def data(self):
         url = self.prefix + f"/gs-robot/data/device_status"
         try:
@@ -273,7 +346,7 @@ class EcobotAPI:
     def navigation_completed(self):
         return self.is_task_queue_finished()
 
-    def docking_completed(self):
+    def task_completed(self):
         ''' For ecobots the same function is used to check completion of navigation & cleaning'''
         return self.is_task_queue_finished()
 
@@ -297,3 +370,23 @@ class EcobotAPI:
         except Exception as err:
             print(f"Other error: {err}")
         return False
+
+    def is_charging(self):
+        """Check if robot is charging, will return false if not charging, None if not avail"""
+        response = self.data()
+        if response is not None:
+            # return response["data"]["charge"] # Faced an edge case: robot didnt dock well
+            if response["data"]["chargerCurrent"] > 0.0:
+                return True
+            else:
+                return False
+        else:
+            return None
+
+    def is_localize(self):
+        """Check if robot is localize, will return false if not charging, None if not avail"""
+        response = self.data()
+        if response is not None:
+            return response["data"]["locationStatus"]
+        else:
+            return None
