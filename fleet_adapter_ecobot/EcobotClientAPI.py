@@ -61,10 +61,11 @@ class EcobotAPI:
             self.connected = False
 
         # Get REST API Version
-        if api_version == "":
-            self.api_version = Version(self.get_api_version())
-        else:
-            self.api_version = api_version
+        if self.connected == True:
+            if api_version == "":
+                self.api_version = Version(self.get_api_version())
+            else:
+                self.api_version = api_version
 
     def online(self):
         """Indicates if robot is connected
