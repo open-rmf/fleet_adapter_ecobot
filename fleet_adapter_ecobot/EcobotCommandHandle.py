@@ -446,7 +446,11 @@ class EcobotCommandHandle(adpt.RobotCommandHandle):
             self.action_category = category
             if (category == "clean"):
                 attempts = 0
-                self.api.set_cleaning_mode(self.config['active_cleaning_config'])
+                if 'clean_mode' in description:
+                    clean_mode = description['clean_mode']
+                else:
+                    clean_mode = self.config['active_cleaning_config']
+                self.api.set_cleaning_mode(clean_mode)
                 # Will try to make max 3 attempts to start the clean task
                 while True:
                     self.node.get_logger().info(
