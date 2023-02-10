@@ -61,7 +61,7 @@ ros2 run rmf_demos_tasks dispatch_patrol -p pantry
 
 Send the robot to clean an area. This custom clean task is created by composing `go_to_place` and custom `perform_action`.
 ```bash
-ros2 run rmf_demos_tasks dispatch_action -s patrol_D2 -a clean -ad '{ "clean_task_name": "clean_hallway" }'
+ros2 run rmf_demos_tasks dispatch_action -s patrol_D2 -a clean -ad '{ "clean_task_name": "clean_hallway", "clean_mode": "heavy_cleaning" }'
 ```
 
 ### Show overlayed ecobot map
