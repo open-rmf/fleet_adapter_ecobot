@@ -56,16 +56,24 @@ class EcobotAPI:
         if data is not None:
             print("[EcobotAPI] successfully able to query API server")
             self.connected = True
+            self.error = None
         else:
             print("[EcobotAPI] unable to query API server")
             self.connected = False
+            self.error = "api_version_query"
 
-        # Get REST API Version
-        if self.connected == True:
-            if api_version == "":
-                self.api_version = Version(self.get_api_version())
-            else:
-                self.api_version = api_version
+        # Validate REST API Version
+        robot_api_version = Version(self.get_api_version())
+        if robot_api_version is None:
+            print("[EcobotAPI] Error: Unable to query API version on robot, exiting")
+            self.error = "api_version_query"
+            return self.error
+        if api_version == "":
+            self.api_version = robot_api_version
+        else:
+            if self.api_version != robot_api_version:
+                print("[EcobotAPI] Warning: Defined api version: %s  and robot API version: %s do not match", format(self.api_version, robot_api_version))
+            self.api_version = robot_api_version
 
     def online(self):
         """Indicates if robot is connected

@@ -168,6 +168,10 @@ def initialize_fleet(config_yaml, nav_graph_path, node, server_uri, args):
                 else:
                     api = EcobotAPI(robot_config['base_url'], robot_config['cleaning_task_prefix'])
 
+                if api.error():
+                    node.get_logger().error(f"Robot error: [{api.error}]")
+                    raise SystemExit
+
                 if not api.online():
                     node.get_logger().error(f"Robot [{robot_map_name}] is offline")
                     continue
