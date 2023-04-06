@@ -134,14 +134,11 @@ class EcobotFleetManager(Node):
             return jsonify(data)
 
         
-        
-        ### TODO: WIP
-        @self.app.route('/gs-robot/data/current_map', methods=['GET'])
+        @self.app.route('/gs-robot/real_time_data/robot_status', methods=['GET'])
         def current_map():
             current_map_name = self.state.location.level_name
             data = {"data":{"current_map":current_map_name}}
             return jsonify(data)
-        #########################
 
 
         @self.app.route('/gs-robot/cmd/is_task_queue_finished', methods=['GET'])

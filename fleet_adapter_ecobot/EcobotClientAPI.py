@@ -254,7 +254,7 @@ class EcobotAPI:
         return False
 
     def current_map(self):
-        url = self.prefix + f"/gs-robot/data/current_map"
+        url = self.prefix + f"/gs-robot/real_time_data/robot_status"
         try:
             response = requests.get(url, timeout=self.timeout)
             response.raise_for_status()
