@@ -262,7 +262,7 @@ class EcobotAPI:
                 # print(f"Response: \n {response.json()}")
                 print(json.dumps(response.json(), indent=2))
 
-            return response.json()["data"]["current_map"]
+            return response.json()["data"]["robotStatus"]["map"]["name"]
         except HTTPError as http_err:
             print(f"HTTP error: {http_err}")
         except Exception as err:
