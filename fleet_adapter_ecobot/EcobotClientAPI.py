@@ -254,7 +254,7 @@ class EcobotAPI:
         return False
 
     def current_map(self):
-        url = self.prefix + f"/gs-robot/real_time_data/robot_status"
+        url = self.prefix + f"/gs-robot/data/current_map"
         try:
             response = requests.get(url, timeout=self.timeout)
             response.raise_for_status()
@@ -262,7 +262,7 @@ class EcobotAPI:
                 # print(f"Response: \n {response.json()}")
                 print(json.dumps(response.json(), indent=2))
 
-            return response.json()["data"]["robotStatus"]["map"]["name"]
+            return response.json()["data"]["current_map"]
         except HTTPError as http_err:
             print(f"HTTP error: {http_err}")
         except Exception as err:
@@ -270,6 +270,7 @@ class EcobotAPI:
         return None
 
     #NOTE: Unstable gaussian api 2.0. Get task status
+    # TODO: Check if we need this
     def __state(self):
         url = self.prefix + f"/gs-robot/real_time_data/robot_status"
         try:
