@@ -270,6 +270,7 @@ class EcobotAPI:
         return None
 
     #NOTE: Unstable gaussian api 2.0. Get task status
+    # TODO: Check if we need this
     def __state(self):
         url = self.prefix + f"/gs-robot/real_time_data/robot_status"
         try:
