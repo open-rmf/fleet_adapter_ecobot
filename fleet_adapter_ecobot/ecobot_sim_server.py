@@ -24,6 +24,8 @@ from rclpy.qos import qos_profile_system_default
 from rclpy.parameter import Parameter
 
 from rmf_fleet_msgs.msg import RobotState, FleetState, Location, PathRequest
+from rmf_fleet_msgs.msg import RobotMode
+
 
 import rmf_adapter.vehicletraits as traits
 import rmf_adapter.geometry as geometry
@@ -109,9 +111,35 @@ class EcobotFleetManager(Node):
 
         @self.app.route('/gs-robot/data/device_status', methods=['GET'])
         def device_status():
+            # We add needed fields
+            # Percentage of charge in %
+            # ["battery"],
+            # If charging Has to be > 0, i not 0
+            # ["chargerCurrent"],
+            # robot is localize, will return false if not charging, None if not avail
+            # ["locationStatus"]
+
             battery_soc = self.state.battery_percent
-            data = {"data":{"battery":battery_soc}}
+            # We nee dto know if we are charging --> 
+            # self.state.mode.mode ==  RobotMode.MODE_CHARGING
+            if self.state.mode.mode ==  RobotMode.MODE_CHARGING:
+                # Arbitrary number bigger than 0
+                chargerCurrent = 1.0
+                locationStatus = True
+            else:
+                chargerCurrent = 0.0
+                locationStatus = False
+            
+            data = {"data":{"battery":battery_soc, "chargerCurrent":chargerCurrent, "locationStatus":locationStatus}}
             return jsonify(data)
+
+        
+        @self.app.route('/gs-robot/real_time_data/robot_status', methods=['GET'])
+        def current_map():
+            current_map_name = self.state.location.level_name
+            data = {"data":{"robotStatus":{"map":{"name":current_map_name}}}}
+            return jsonify(data)
+
 
         @self.app.route('/gs-robot/cmd/is_task_queue_finished', methods=['GET'])
         def is_task_queue_finished():
